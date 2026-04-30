@@ -1,5 +1,4 @@
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -180,23 +179,41 @@ def test_candles_list_contract_returns_chronological_candles(client, db_session)
     assert [candle["close"] for candle in payload["candles"]] == [11.0, 12.0]
 
 
-def test_signals_analyze_queues_celery_task_contract(client, db_session, monkeypatch):
-    from app.worker import tasks
+def test_signals_analyze_runs_synchronous_analysis_contract(client, db_session, monkeypatch):
+    from app.services.llm_analysis import LLMAnalysisService
 
     symbol = add_symbol(db_session)
     calls = []
 
-    def fake_delay(symbol_id, symbol_name, exchange):
-        calls.append((symbol_id, symbol_name, exchange))
-        return SimpleNamespace(id="task-123")
+    async def fake_analyze_and_store(self, db, sym, timeframe="1h", candles_limit=200):
+        calls.append((sym.symbol_id, sym.symbol, sym.exchange, timeframe, candles_limit))
+        signal = Signal(
+            symbol_id=sym.symbol_id,
+            symbol=sym.symbol,
+            exchange=sym.exchange,
+            direction="buy",
+            confidence=82,
+            setup_type="breakout",
+            reasoning="Test analysis",
+            analysis_type="ai",
+            timestamp=datetime(2026, 4, 30, 7, 0, 0, tzinfo=UTC),
+        )
+        db.add(signal)
+        db.flush()
+        return signal
 
-    monkeypatch.setattr(tasks.analyze_symbol_task, "delay", fake_delay)
+    monkeypatch.setattr(LLMAnalysisService, "analyze_and_store", fake_analyze_and_store)
 
     response = client.post(f"/api/signals/analyze/{symbol.symbol}")
 
     assert response.status_code == 200
-    assert response.json() == {"task_id": "task-123"}
-    assert calls == [(symbol.symbol_id, "BTC", "hyperliquid")]
+    payload = response.json()
+    assert payload["symbol"] == "BTC"
+    assert payload["direction"] == "buy"
+    assert payload["confidence"] == 82
+    assert payload["setup_type"] == "breakout"
+    assert isinstance(payload["signal_id"], int)
+    assert calls == [(symbol.symbol_id, "BTC", "hyperliquid", "1h", 200)]
 
 
 def test_portfolio_create_and_summary_contract(client, db_session, monkeypatch):

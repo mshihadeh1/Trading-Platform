@@ -5,7 +5,16 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
-  if (!res.ok) throw new Error(`API error ${res.status}: ${res.statusText}`);
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body);
+    } catch {
+      // Keep the HTTP status text when the response body is not JSON.
+    }
+    throw new Error(`API error ${res.status}: ${detail}`);
+  }
   return res.json();
 }
 
@@ -34,7 +43,10 @@ export const candles = {
 export const signals = {
   list: (limit: number = 50) => fetchJson<import('../types').Signal[]>(`/signals?limit=${limit}`),
   trigger: (symbol: string) =>
-    fetchJson<{ task_id: string }>(`/signals/analyze/${symbol}`, { method: 'POST' }),
+    fetchJson<{ signal_id: number; symbol: string; direction: string; confidence: number; setup_type: string }>(
+      `/signals/analyze/${symbol}`,
+      { method: 'POST' }
+    ),
   execute: (signalId: number, quantity: number = 1) =>
     fetchJson<import('../types').Trade>(`/signals/${signalId}/execute`, {
       method: 'POST',

@@ -169,13 +169,27 @@ async def trigger_analysis(
     symbol: str,
     db: Session = Depends(get_db),
 ):
-    """Trigger a one-off AI analysis for a symbol."""
-    # Find the symbol
+    """Trigger a one-off AI analysis for a symbol (runs synchronously)."""
     sym = db.exec(select(Symbol).where(Symbol.symbol == symbol)).first()
     if not sym:
         raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found")
 
-    # Trigger Celery task
-    from app.worker.tasks import analyze_symbol_task
-    task = analyze_symbol_task.delay(sym.symbol_id, sym.symbol, sym.exchange)
-    return {"task_id": task.id}
+    from app.services.llm_analysis import LLMAnalysisService
+
+    service = LLMAnalysisService()
+    signal = await service.analyze_and_store(db, sym)
+
+    if not signal:
+        raise HTTPException(status_code=500, detail=f"Analysis failed for {sym.symbol}")
+
+    # Commit the signal
+    db.commit()
+    db.refresh(signal)
+
+    return {
+        "signal_id": signal.id,
+        "symbol": sym.symbol,
+        "direction": signal.direction,
+        "confidence": signal.confidence,
+        "setup_type": signal.setup_type,
+    }

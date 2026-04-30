@@ -237,7 +237,7 @@ All routes are prefixed with `/api/`. Full interactive docs at `http://localhost
 | GET | `/api/signals` | List AI-generated signals |
 | GET | `/api/signals/{signal_id}` | Get one signal by ID |
 | GET | `/api/signals/latest?symbol=SYMBOL` | Latest signal for a symbol |
-| POST | `/api/signals/analyze/{symbol}` | Trigger on-demand analysis |
+| POST | `/api/signals/analyze/{symbol}` | Run on-demand AI analysis synchronously and return the created signal summary |
 | POST | `/api/signals/{signal_id}/execute` | Create or return a linked paper trade for a buy/sell signal |
 | GET | `/api/daily-brief/latest` | Latest daily market brief |
 | GET | `/api/daily-brief/history` | Historical daily briefs |
