@@ -1,370 +1,238 @@
-"""Celery worker tasks for the trading platform."""
+"""Celery worker tasks for candle collection, AI analysis, and paper trading."""
 
+import asyncio
 import json
 import logging
-import asyncio
-from datetime import datetime, timezone
+from contextlib import contextmanager
+from datetime import datetime
+from app.utils.time import utc_now
+from typing import Iterator
 
-from app.celery import celery_app as shared_task
 from sqlmodel import Session, select
 
+from app.celery import celery_app
 from app.database import engine
+from app.models.config import AppConfig
 from app.models.candle import Candle
-from app.models.symbol import Symbol
-from app.models.signal import Signal
 from app.models.paper_trade import PaperTrade
-from app.services.hyperliquid import get_candles, get_perpetual_symbols, get_info
-from app.services.yahoo_finance import get_candles as yf_candles
-from app.services.yahoo_finance import YAHOO_POPULAR, get_current_price
-from app.services.indicators import compute
-from app.services.llm import analyze_symbol
+from app.models.symbol import Symbol
+from app.services.candle_collector import CandleCollector
+from app.services.llm_analysis import LLMAnalysisService
+from app.services.yahoo_finance import get_current_price
 
 logger = logging.getLogger(__name__)
 
 
-def _get_db():
-    """Context manager to get a database session."""
-    with Session(engine) as session:
+@contextmanager
+def session_scope() -> Iterator[Session]:
+    session = Session(engine)
+    try:
         yield session
+    finally:
+        session.close()
 
 
-def _store_candles(symbol: str, candles: list):
-    """Store candles in the database, skipping duplicates."""
-    with _get_db() as db:
-        sym = db.exec(select(Symbol).where(Symbol.symbol == symbol)).first()
-        if not sym:
-            logger.warning(f"No symbol found for {symbol}, skipping candle storage")
-            return
-
-        for candle in candles:
-            ts = candle["timestamp"]
-            if isinstance(ts, (int, float)):
-                from datetime import datetime as dt
-                ts = dt.fromtimestamp(ts, tz=timezone.utc)
-
-            existing = db.exec(
-                select(Candle).where(
-                    Candle.symbol_id == sym.symbol_id,
-                    Candle.timestamp == ts,
-                )
-            ).first()
-            if not existing:
-                db.add(Candle(
-                    symbol_id=sym.symbol_id,
-                    timestamp=ts,
-                    open=candle["open"],
-                    high=candle["high"],
-                    low=candle["low"],
-                    close=candle["close"],
-                    volume=candle["volume"],
-                ))
-        db.commit()
+async def _collect_symbol_candles(collector: CandleCollector, symbol: Symbol, timeframe: str) -> int:
+    return await collector.collect_symbol(
+        symbol=symbol.symbol,
+        exchange=symbol.exchange,
+        interval=timeframe,
+    )
 
 
-@shared_task(name="worker.tasks.fetch_historical_data")
-def fetch_historical_data():
-    """Fetch and store historical candles for all watched symbols."""
-    logger.info("Starting historical data fetch...")
-    total = 0
+def _latest_price(db: Session, symbol: Symbol) -> float | None:
+    if symbol.exchange == "yahoo":
+        price = get_current_price(symbol.symbol)
+        if price is not None:
+            return price
 
-    # Fetch Hyperliquid perps (running async tasks in sync context)
-    perps = asyncio.run(_fetch_all_async())
-    for symbol, candles in perps.items():
+    latest_candle = db.exec(
+        select(Candle)
+        .where(Candle.symbol_id == symbol.symbol_id)
+        .order_by(Candle.timestamp.desc())
+        .limit(1)
+    ).first()
+    return float(latest_candle.close) if latest_candle else None
+
+
+def _set_task_status(
+    db: Session,
+    key: str,
+    payload: dict,
+    description: str,
+) -> None:
+    record = db.exec(select(AppConfig).where(AppConfig.key == key)).first()
+    value = json.dumps(payload)
+    if record is None:
+        record = AppConfig(key=key, value=value, description=description)
+        db.add(record)
+    else:
+        record.value = value
+        record.description = description
+        record.updated_at = utc_now()
+    db.commit()
+
+
+@celery_app.task(name="app.worker.tasks.collect_candles")
+def collect_candles(timeframe: str = "1h") -> dict:
+    logger.info("Collecting candles for active watchlist symbols")
+    collector = CandleCollector()
+    stored = 0
+    processed = 0
+
+    task_result = {"status": "ok", "symbols": 0, "candles_stored": 0, "timeframe": timeframe, "updated_at": utc_now().isoformat()}
+
+    with session_scope() as db:
+        symbols = db.exec(select(Symbol).where(Symbol.is_active == True)).all()
+
+    for symbol in symbols:
         try:
-            _store_candles(symbol, candles)
-            total += len(candles)
-        except Exception as e:
-            logger.error(f"Failed to store candles for {symbol}: {e}")
+            count = asyncio.run(_collect_symbol_candles(collector, symbol, timeframe))
+            stored += count
+            processed += 1
+        except Exception as exc:
+            logger.exception("Failed to collect candles for %s: %s", symbol.symbol, exc)
 
-    # Fetch Yahoo Finance symbols
-    for yahoo_symbol in YAHOO_POPULAR:
-        sym_name = yahoo_symbol["symbol"]
-        try:
-            candles = asyncio.run(yf_candles(sym_name, period="2y", interval="1h"))
-            _store_candles(sym_name, candles)
-            total += len(candles)
-        except Exception as e:
-            logger.error(f"Failed to fetch candles for {sym_name}: {e}")
-
-    logger.info(f"Historical data fetch complete: {total} candles stored")
-    return {"status": "ok", "candles_fetched": total}
+    task_result["symbols"] = processed
+    task_result["candles_stored"] = stored
+    with session_scope() as db:
+        _set_task_status(db, "task.collect_candles", task_result, "Latest candle collection task status")
+    return task_result
 
 
-async def _fetch_all_async():
-    """Async helper: fetch candles for all Hyperliquid perps."""
-    perps = get_perpetual_symbols()
-    tasks = []
-    for perp in perps:
-        tasks.append(get_candles(perp["symbol"], interval="1h", limit=200))
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    data = {}
-    for (perp, result) in zip(perps, results):
-        sym = perp["symbol"]
-        if isinstance(result, Exception):
-            logger.error(f"Failed to fetch {sym}: {result}")
-        else:
-            data[sym] = result
-    return data
+@celery_app.task(name="app.worker.tasks.fetch_historical_data")
+def fetch_historical_data() -> dict:
+    return collect_candles()
 
 
-@shared_task(name="worker.tasks.analyze_symbol")
-def analyze_symbol_task(symbol_id: int, symbol: str, exchange: str):
-    """Run AI analysis on a single symbol."""
-    logger.info(f"Starting AI analysis for {symbol}...")
+@celery_app.task(name="app.worker.tasks.analyze_symbol")
+def analyze_symbol_task(symbol_id: int, symbol_name: str | None = None, exchange: str | None = None) -> dict:
+    with session_scope() as db:
+        symbol = db.get(Symbol, symbol_id)
+        if not symbol:
+            return {"status": "error", "message": f"Symbol {symbol_id} not found"}
 
-    try:
-        with _get_db() as db:
-            stmt = (
-                select(Candle)
-                .where(Candle.symbol_id == symbol_id)
-                .order_by(Candle.timestamp.desc())
-                .limit(100)
-            )
-            candles = db.exec(stmt).all()
-            if not candles or len(candles) < 50:
-                logger.warning(f"Insufficient data for {symbol}: {len(candles) if candles else 0} candles")
-                return {"status": "error", "message": "Insufficient data"}
+        service = LLMAnalysisService()
+        signal = asyncio.run(service.analyze_and_store(db, symbol))
+        if not signal:
+            return {"status": "error", "message": f"Analysis failed for {symbol_name or symbol.symbol}"}
 
-            # Convert SQLModel objects to dicts for indicators
-            candle_dicts = [
-                {
-                    "timestamp": c.timestamp,
-                    "open": c.open,
-                    "high": c.high,
-                    "low": c.low,
-                    "close": c.close,
-                    "volume": c.volume,
-                }
-                for c in candles
-            ]
-            candle_dicts.reverse()
+        task_result = {
+            "status": "ok",
+            "signal_id": signal.id,
+            "symbol": symbol.symbol,
+            "direction": signal.direction,
+            "confidence": signal.confidence,
+            "updated_at": utc_now().isoformat(),
+        }
+        _set_task_status(db, f"task.analyze_symbol.{symbol.symbol}", task_result, "Latest one-off symbol analysis task status")
+        return task_result
 
-            indicators = compute(candle_dicts)
-            latest = candle_dicts[-1]
-            close = float(latest["close"])
-            context = f"Current price: ${close:.2f}"
 
-            result = asyncio.run(
-                analyze_symbol(
-                    symbol=symbol,
-                    indicators=indicators,
-                    price_action=indicators.get("price_action_summary", ""),
-                    context=context,
-                    exchange=exchange,
-                    timeframe="1h",
-                )
-            )
+@celery_app.task(name="app.worker.tasks.analyze_watchlist")
+def analyze_watchlist(timeframe: str = "1h") -> dict:
+    logger.info("Running watchlist analysis")
+    generated = 0
 
-            if result:
-                signal = Signal(
-                    symbol_id=symbol_id,
-                    symbol=symbol,
-                    exchange=exchange,
-                    direction=result.get("direction", "hold"),
-                    entry_price=result.get("entry_price"),
-                    stop_loss=result.get("stop_loss"),
-                    take_profit=result.get("take_profit"),
-                    take_profit_2=result.get("take_profit_2"),
-                    confidence=result.get("confidence", 0),
-                    reasoning=result.get("reasoning", ""),
-                    indicators_data=json.dumps(indicators),
-                    llm_model="Qwen3.6-35B-A3B-UD-Q3_K_S.gguf",
-                    analysis_type="ai",
-                    raw_response=json.dumps(result),
-                )
-                db.add(signal)
-                db.commit()
-                logger.info(f"Signal for {symbol}: {result.get('direction')} (confidence {result.get('confidence', 0)})")
-                return {"status": "ok", "direction": result.get("direction")}
+    task_result = {"status": "ok", "signals_generated": 0, "timeframe": timeframe, "updated_at": utc_now().isoformat()}
+
+    with session_scope() as db:
+        symbols = db.exec(select(Symbol).where(Symbol.is_active == True)).all()
+        service = LLMAnalysisService()
+
+        for symbol in symbols:
+            try:
+                signal = asyncio.run(service.analyze_and_store(db, symbol, timeframe=timeframe))
+                if signal:
+                    generated += 1
+            except Exception as exc:
+                logger.exception("Failed to analyze %s: %s", symbol.symbol, exc)
+                db.rollback()
+
+        task_result["signals_generated"] = generated
+        _set_task_status(db, "task.analyze_watchlist", task_result, "Latest watchlist analysis task status")
+
+    return task_result
+
+
+@celery_app.task(name="app.worker.tasks.analyze_all_signals")
+def analyze_all_signals(timeframe: str = "1h") -> dict:
+    return analyze_watchlist(timeframe=timeframe)
+
+
+@celery_app.task(name="app.worker.tasks.check_sl_tp")
+def check_sl_tp() -> dict:
+    logger.info("Checking open paper trades against stop-loss / take-profit")
+    closed = 0
+
+    task_result = {"status": "ok", "closed_trades": 0, "updated_at": utc_now().isoformat()}
+
+    with session_scope() as db:
+        open_trades = db.exec(select(PaperTrade).where(PaperTrade.status == "open")).all()
+
+        for trade in open_trades:
+            symbol = db.get(Symbol, trade.symbol_id)
+            if not symbol:
+                continue
+
+            price = _latest_price(db, symbol)
+            if price is None:
+                continue
+
+            trade.current_price = round(price, 8)
+            trade.pnl = 0.0
+            trade.pnl_pct = 0.0
+            if trade.direction == "long":
+                unrealized = (price - trade.entry_price) * trade.quantity
             else:
-                return {"status": "error", "message": "LLM analysis failed"}
+                unrealized = (trade.entry_price - price) * trade.quantity
+            trade.pnl = round(unrealized, 2)
+            trade.pnl_pct = round((unrealized / (trade.entry_price * trade.quantity)) * 100, 2) if trade.entry_price else 0.0
 
-    except Exception as e:
-        logger.error(f"Failed to analyze {symbol}: {e}")
-        return {"status": "error", "message": str(e)}
+            exit_price = None
+            status = "open"
+            if trade.direction == "long":
+                if trade.stop_loss is not None and price <= trade.stop_loss:
+                    status = "sl_hit"
+                    exit_price = trade.stop_loss
+                elif trade.take_profit is not None and price >= trade.take_profit:
+                    status = "tp_hit"
+                    exit_price = trade.take_profit
+                elif trade.take_profit_2 is not None and price >= trade.take_profit_2:
+                    status = "tp_hit"
+                    exit_price = trade.take_profit_2
+            else:
+                if trade.stop_loss is not None and price >= trade.stop_loss:
+                    status = "sl_hit"
+                    exit_price = trade.stop_loss
+                elif trade.take_profit is not None and price <= trade.take_profit:
+                    status = "tp_hit"
+                    exit_price = trade.take_profit
+                elif trade.take_profit_2 is not None and price <= trade.take_profit_2:
+                    status = "tp_hit"
+                    exit_price = trade.take_profit_2
 
+            if status != "open" and exit_price is not None:
+                if trade.direction == "long":
+                    realized = (exit_price - trade.entry_price) * trade.quantity
+                else:
+                    realized = (trade.entry_price - exit_price) * trade.quantity
+                trade.status = status
+                trade.exit_price = exit_price
+                trade.exit_time = utc_now()
+                trade.current_price = exit_price
+                trade.close_reason = status
+                trade.pnl = round(realized, 2)
+                trade.pnl_pct = round((realized / (trade.entry_price * trade.quantity)) * 100, 2) if trade.entry_price else 0.0
+                closed += 1
 
-@shared_task(name="worker.tasks.analyze_all_signals")
-def analyze_all_signals():
-    """Run AI analysis on all active symbols."""
-    logger.info("Starting AI signal analysis...")
-    analyzed = 0
+        db.commit()
+        task_result["closed_trades"] = closed
+        _set_task_status(db, "task.check_sl_tp", task_result, "Latest paper trade stop-loss/take-profit task status")
 
-    try:
-        with _get_db() as db:
-            symbols = db.exec(select(Symbol).where(Symbol.is_active == True)).all()
-
-            for sym in symbols:
-                try:
-                    stmt = (
-                        select(Candle)
-                        .where(Candle.symbol_id == sym.symbol_id)
-                        .order_by(Candle.timestamp.desc())
-                        .limit(100)
-                    )
-                    candles = db.exec(stmt).all()
-                    if not candles or len(candles) < 50:
-                        continue
-
-                    candle_dicts = [
-                        {
-                            "timestamp": c.timestamp,
-                            "open": c.open,
-                            "high": c.high,
-                            "low": c.low,
-                            "close": c.close,
-                            "volume": c.volume,
-                        }
-                        for c in candles
-                    ]
-                    candle_dicts.reverse()
-
-                    indicators = compute(candle_dicts)
-                    latest = candle_dicts[-1]
-                    close = float(latest["close"])
-                    context = f"Current price: ${close:.2f}"
-
-                    result = asyncio.run(
-                        analyze_symbol(
-                            symbol=sym.symbol,
-                            indicators=indicators,
-                            price_action=indicators.get("price_action_summary", ""),
-                            context=context,
-                            exchange=sym.exchange,
-                            timeframe="1h",
-                        )
-                    )
-
-                    if result:
-                        signal = Signal(
-                            symbol_id=sym.symbol_id,
-                            symbol=sym.symbol,
-                            exchange=sym.exchange,
-                            direction=result.get("direction", "hold"),
-                            entry_price=result.get("entry_price"),
-                            stop_loss=result.get("stop_loss"),
-                            take_profit=result.get("take_profit"),
-                            take_profit_2=result.get("take_profit_2"),
-                            confidence=result.get("confidence", 0),
-                            reasoning=result.get("reasoning", ""),
-                            indicators_data=json.dumps(indicators),
-                            llm_model="Qwen3.6-35B-A3B-UD-Q3_K_S.gguf",
-                            analysis_type="ai",
-                            raw_response=json.dumps(result),
-                        )
-                        db.add(signal)
-                        db.commit()
-                        analyzed += 1
-                        logger.info(f"Signal for {sym.symbol}: {result.get('direction')} (confidence {result.get('confidence', 0)})")
-
-                except Exception as e:
-                    logger.error(f"Failed to analyze {sym.symbol}: {e}")
-
-    except Exception as e:
-        logger.error(f"Database error during analysis: {e}")
-
-    logger.info(f"Signal analysis complete: {analyzed} signals generated")
-    return {"status": "ok", "analyzed": analyzed}
+    return task_result
 
 
-@shared_task(name="worker.tasks.check_paper_trades")
-def check_paper_trades():
-    """Check open paper trades for stop-loss and take-profit hits."""
-    logger.info("Checking paper trades for SL/TP hits...")
-    checked = 0
-
-    try:
-        with _get_db() as db:
-            open_trades = db.exec(
-                select(PaperTrade).where(PaperTrade.status == "open")
-            ).all()
-
-            for trade in open_trades:
-                try:
-                    sym = db.exec(
-                        select(Symbol).where(Symbol.symbol_id == trade.symbol_id)
-                    ).first()
-                    if not sym:
-                        continue
-
-                    symbol = sym.symbol
-                    price = get_current_price(symbol)
-                    if price is None:
-                        stmt = (
-                            select(Candle)
-                            .where(Candle.symbol_id == trade.symbol_id)
-                            .order_by(Candle.timestamp.desc())
-                            .limit(1)
-                        )
-                        latest = db.exec(stmt).first()
-                        if latest:
-                            price = float(latest.close)
-                        else:
-                            continue
-
-                    pnl = 0.0
-                    pnl_pct = 0.0
-                    status = "open"
-                    exit_price = None
-                    exit_time = None
-
-                    # Check stop loss
-                    if trade.stop_loss:
-                        if trade.direction == "long" and price <= trade.stop_loss:
-                            status = "sl_hit"
-                            exit_price = trade.stop_loss
-                            pnl = trade.quantity * (exit_price - trade.entry_price)
-                            exit_time = datetime.now(timezone.utc)
-                        elif trade.direction == "short" and price >= trade.stop_loss:
-                            status = "sl_hit"
-                            exit_price = trade.stop_loss
-                            pnl = trade.quantity * (trade.entry_price - exit_price)
-                            exit_time = datetime.now(timezone.utc)
-
-                    # Check take profit
-                    if status == "open" and trade.take_profit:
-                        if trade.direction == "long" and price >= trade.take_profit:
-                            status = "tp_hit"
-                            exit_price = trade.take_profit
-                            pnl = trade.quantity * (exit_price - trade.entry_price)
-                            exit_time = datetime.now(timezone.utc)
-                        elif trade.direction == "short" and price <= trade.take_profit:
-                            status = "tp_hit"
-                            exit_price = trade.take_profit
-                            pnl = trade.quantity * (trade.entry_price - exit_price)
-                            exit_time = datetime.now(timezone.utc)
-
-                    # Check take profit 2
-                    if status == "open" and trade.take_profit_2:
-                        if trade.direction == "long" and price >= trade.take_profit_2:
-                            status = "tp_hit"
-                            exit_price = trade.take_profit_2
-                            pnl = trade.quantity * (exit_price - trade.entry_price)
-                            exit_time = datetime.now(timezone.utc)
-                        elif trade.direction == "short" and price <= trade.take_profit_2:
-                            status = "tp_hit"
-                            exit_price = trade.take_profit_2
-                            pnl = trade.quantity * (trade.entry_price - exit_price)
-                            exit_time = datetime.now(timezone.utc)
-
-                    if status != "open":
-                        trade.status = status
-                        trade.exit_price = exit_price
-                        trade.exit_time = exit_time
-                        pnl_pct = (pnl / (trade.entry_price * trade.quantity)) * 100 if trade.quantity * trade.entry_price else 0
-                        trade.pnl = round(pnl, 2)
-                        trade.pnl_pct = round(pnl_pct, 2)
-                        db.commit()
-                        logger.info(f"Trade #{trade.id} closed: {status}, P&L: ${pnl:.2f}")
-
-                    checked += 1
-
-                except Exception as e:
-                    logger.error(f"Failed to check trade #{trade.id}: {e}")
-
-    except Exception as e:
-        logger.error(f"Database error during trade check: {e}")
-
-    logger.info(f"Trade check complete: {checked} trades evaluated")
-    return {"status": "ok", "checked": checked}
+@celery_app.task(name="app.worker.tasks.check_paper_trades")
+def check_paper_trades() -> dict:
+    return check_sl_tp()

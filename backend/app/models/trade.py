@@ -1,6 +1,7 @@
 """Trade models."""
 
 from datetime import datetime
+from app.utils.time import utc_now
 from typing import Optional
 
 from pydantic import BaseModel
@@ -22,7 +23,7 @@ class Trade(SQLModel, table=True):
     status: str = "open"  # open, closed, cancelled
     trading_mode: str = "paper"  # paper or live
     close_reason: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
     closed_at: Optional[datetime] = None
     current_price: Optional[float] = None
 

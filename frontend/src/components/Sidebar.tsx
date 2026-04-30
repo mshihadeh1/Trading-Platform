@@ -13,7 +13,7 @@ interface Props {
 
 export function Sidebar({ symbols, loading, newSymbol, setNewSymbol, onAdd, onRemove, onSelect, activeSymbolId }: Props) {
   const hyperliquidSymbols = symbols.filter(s => s.exchange === 'hyperliquid');
-  const yahooSymbols = symbols.filter(s => s.exchange === 'yahoo_finance');
+  const yahooSymbols = symbols.filter(s => s.exchange === 'yahoo');
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') onAdd();

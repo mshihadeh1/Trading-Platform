@@ -1,9 +1,7 @@
-// BASE is '/api' which is proxied by Vite to http://localhost:8000
-// API paths should NOT include /api prefix since BASE already provides it
 const BASE = '/api';
 
 async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${path}`, {
+  const res = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -13,39 +11,43 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
 
 // Watchlist
 export const watchlist = {
-  list: () => fetchJson<import('../types').SymbolInfo[]>(`${BASE}/watchlist`),
-  add: (symbol: string, exchange: string) =>
-    fetchJson<import('../types').SymbolInfo>(`${BASE}/watchlist`, {
+  list: () => fetchJson<import('../types').SymbolInfo[]>('/watchlist'),
+  add: (symbol: string, exchange: string, symbolType: string, displayName: string) =>
+    fetchJson<import('../types').SymbolInfo>('/watchlist', {
       method: 'POST',
-      body: JSON.stringify({ symbol, exchange, is_active: true }),
+      body: JSON.stringify({ symbol, exchange, symbol_type: symbolType, display_name: displayName }),
     }),
-  remove: (id: number) =>
-    fetchJson(`${BASE}/watchlist/${id}`, { method: 'DELETE' }),
+  remove: (id: number) => fetchJson(`/watchlist/${id}`, { method: 'DELETE' }),
 };
 
 // Candles
 export const candles = {
   list: (symbolId: number, limit: number = 200) =>
-    fetchJson<import('../types').CandlesResponse>(
-      `${BASE}/candles/${symbolId}?limit=${limit}`
-    ),
+    fetchJson<import('../types').CandlesResponse>(`/candles/${symbolId}?limit=${limit}`),
+  refresh: (symbolId: number, timeframe: string = '1h') =>
+    fetchJson<{ candles_stored: number; symbol: string }>(`/candles/fetch/${symbolId}?timeframe=${timeframe}`, {
+      method: 'POST',
+    }),
 };
 
 // Signals
 export const signals = {
-  list: (limit: number = 50) =>
-    fetchJson<import('../types').Signal[]>(`${BASE}/signals?limit=${limit}`),
+  list: (limit: number = 50) => fetchJson<import('../types').Signal[]>(`/signals?limit=${limit}`),
   trigger: (symbol: string) =>
-    fetchJson<{ task_id: string }>(`${BASE}/signals/analyze/${symbol}`),
+    fetchJson<{ task_id: string }>(`/signals/analyze/${symbol}`, { method: 'POST' }),
 };
 
 // Trades / Portfolio
 export const portfolio = {
-  summary: () => fetchJson<import('../types').PortfolioSummary>(`${BASE}/portfolio/summary`),
-  list: () => fetchJson<import('../types').Trade[]>(`${BASE}/trades`),
+  summary: () => fetchJson<import('../types').PortfolioSummary>('/portfolio/summary'),
+  list: () => fetchJson<import('../types').Trade[]>('/portfolio'),
   execute: (data: { symbol: string; quantity: number; price: number; side: string }) =>
-    fetchJson<import('../types').Trade>(`${BASE}/trades/execute`, {
+    fetchJson<import('../types').Trade>('/trades/execute', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+};
+
+export const system = {
+  status: () => fetchJson<import('../types').SystemStatus>('/health/status'),
 };

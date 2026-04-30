@@ -27,17 +27,17 @@ celery_app.config_from_object({
 
 # Scheduled tasks
 celery_app.conf.beat_schedule = {
-    "fetch-historical-data": {
-        "task": "worker.tasks.fetch_historical_data",
-        "schedule": 300,  # every 5 minutes
+    "collect-candles": {
+        "task": "app.worker.tasks.collect_candles",
+        "schedule": 300,
     },
-    "analyze-all-signals": {
-        "task": "worker.tasks.analyze_all_signals",
-        "schedule": 14400,  # every 4 hours
+    "analyze-watchlist": {
+        "task": "app.worker.tasks.analyze_watchlist",
+        "schedule": 14400,
     },
-    "check-paper-trades": {
-        "task": "worker.tasks.check_paper_trades",
-        "schedule": 30,  # every 30 seconds
+    "check-sl-tp": {
+        "task": "app.worker.tasks.check_sl_tp",
+        "schedule": 30,
     },
 }
 

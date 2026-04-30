@@ -1,21 +1,5 @@
-from celery import Celery
-from app.config import settings
+"""Compatibility wrapper for the shared Celery app."""
 
-celery_app = Celery(
-    "worker",
-    broker=settings.redis_url,
-    backend=settings.redis_url,
-)
+from app.celery import celery_app
 
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    beat_schedule={},
-)
-
-# Auto-discover tasks
-celery_app.autodiscover_tasks(["app.worker"])
+__all__ = ["celery_app"]

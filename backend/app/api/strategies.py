@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from typing import List
+from datetime import datetime
+from app.utils.time import utc_now
 from app.database import get_db
 from app.models.strategy import Strategy
 from app.schemas.strategy import StrategyCreate, StrategyUpdate, StrategyResponse
@@ -18,8 +20,8 @@ async def get_strategies(db: Session = Depends(get_db)):
 async def create_strategy(item: StrategyCreate, db: Session = Depends(get_db)):
     strategy = Strategy(
         name=item.name,
-        description=item.description,
-        conditions=[c.model_dump_json() for c in item.conditions],
+        description=item.description or "",
+        conditions=[c.model_dump() for c in item.conditions],
         timeframe=item.timeframe,
         exchange=item.exchange,
     )
@@ -37,10 +39,10 @@ async def update_strategy(strategy_id: int, item: StrategyUpdate, db: Session = 
 
     for key, value in item.model_dump(exclude_unset=True).items():
         if key == "conditions" and value:
-            value = [c.model_dump_json() for c in value]
+            value = [c.model_dump() for c in value]
         setattr(strategy, key, value)
 
-    strategy.updated_at = db.func.now()
+    strategy.updated_at = utc_now()
     db.commit()
     db.refresh(strategy)
     return strategy
@@ -52,6 +54,6 @@ async def delete_strategy(strategy_id: int, db: Session = Depends(get_db)):
     if not strategy:
         raise HTTPException(status_code=404, detail="Strategy not found")
     strategy.is_active = False
-    strategy.updated_at = db.func.now()
+    strategy.updated_at = utc_now()
     db.commit()
     return {"message": "Strategy deactivated"}

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select, text
+from sqlmodel import Session, select
+from datetime import datetime
+from app.utils.time import utc_now
 from app.database import get_db
 from app.models.config import AppConfig
 from app.schemas.config import AppConfigRequest, AppConfigResponse, AppConfigUpdate
@@ -34,7 +36,7 @@ async def update_config(key: str, item: AppConfigUpdate, db: Session = Depends(g
         config.value = item.value
         if item.description:
             config.description = item.description
-        config.updated_at = db.func.now()
+        config.updated_at = utc_now()
     db.commit()
     db.refresh(config)
     return config

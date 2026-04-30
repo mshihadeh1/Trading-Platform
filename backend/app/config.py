@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Paper trading
     initial_capital: float = 10000.0
     max_position_pct: float = 10.0
+    auto_trade_min_confidence: int = 65
+    max_open_trades: int = 5
+    min_risk_reward_ratio: float = 1.5
 
     # Analysis schedule
     analysis_interval_hours: int = 4

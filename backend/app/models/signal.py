@@ -1,9 +1,10 @@
 """Signal models."""
 
 from datetime import datetime
+from app.utils.time import utc_now
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlmodel import SQLModel, Field
 
 
@@ -26,7 +27,8 @@ class Signal(SQLModel, table=True):
     llm_model: Optional[str] = None
     analysis_type: str = "ai"
     raw_response: Optional[str] = None
-    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    paper_trade_id: Optional[int] = Field(default=None, foreign_key="paper_trades.id")
+    timestamp: Optional[datetime] = Field(default_factory=utc_now)
 
 
 class SignalCreate(BaseModel):
@@ -58,10 +60,10 @@ class SignalResponse(BaseModel):
     llm_model: Optional[str] = None
     analysis_type: str
     raw_response: Optional[str] = None
+    paper_trade_id: Optional[int] = None
     timestamp: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SignalResponseWithSymbol(SignalResponse):

@@ -6,7 +6,8 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 import pandas as pd
-from app.services.indicators import compute_indicators
+
+from app.services.indicators import compute
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +29,14 @@ def evaluate_condition(indicator: str, operator: str, value: float, actual: floa
     return False
 
 
-def run_backtest(candles: List[dict], conditions: List[dict],
-                  initial_capital: float = 10000, timeframe: str = "1h") -> Optional[dict]:
+def run_backtest(
+    candles: List[dict],
+    conditions: List[dict],
+    initial_capital: float = 10000,
+    timeframe: str = "1h",
+    fee_bps: float = 10.0,
+    slippage_bps: float = 5.0,
+) -> Optional[dict]:
     """Run a backtest on historical candle data with strategy conditions."""
     if len(candles) < 50:
         return {"error": "Insufficient historical data (need 50+ candles)"}
@@ -48,7 +55,7 @@ def run_backtest(candles: List[dict], conditions: List[dict],
     for i in range(50, len(df)):
         # Get slice for indicator computation
         window = df.iloc[:i+1]
-        indicators = compute_indicators(
+        indicators = compute(
             window[["timestamp", "open", "high", "low", "close", "volume"]].to_dict("records")
         )
         if not indicators:
@@ -63,6 +70,7 @@ def run_backtest(candles: List[dict], conditions: List[dict],
             if open_position["side"] == "long":
                 if current_price <= open_position["stop_loss"]:
                     pnl = (open_position["stop_loss"] - open_position["entry"]) * open_position["quantity"]
+                    pnl -= open_position["entry_notional"] * ((fee_bps + slippage_bps) / 10000.0)
                     capital += pnl
                     positions.append({
                         "entry": open_position["entry"],
@@ -84,6 +92,7 @@ def run_backtest(candles: List[dict], conditions: List[dict],
                     open_position = None
                 elif open_position.get("take_profit") and current_price >= open_position["take_profit"]:
                     pnl = (open_position["take_profit"] - open_position["entry"]) * open_position["quantity"]
+                    pnl -= open_position["entry_notional"] * ((fee_bps + slippage_bps) / 10000.0)
                     capital += pnl
                     positions.append({
                         "entry": open_position["entry"],
@@ -106,6 +115,7 @@ def run_backtest(candles: List[dict], conditions: List[dict],
             else:  # short
                 if current_price >= open_position["stop_loss"]:
                     pnl = (open_position["entry"] - open_position["stop_loss"]) * open_position["quantity"]
+                    pnl -= open_position["entry_notional"] * ((fee_bps + slippage_bps) / 10000.0)
                     capital += pnl
                     positions.append({
                         "entry": open_position["entry"],
@@ -118,6 +128,7 @@ def run_backtest(candles: List[dict], conditions: List[dict],
                     open_position = None
                 elif open_position.get("take_profit") and current_price <= open_position["take_profit"]:
                     pnl = (open_position["entry"] - open_position["take_profit"]) * open_position["quantity"]
+                    pnl -= open_position["entry_notional"] * ((fee_bps + slippage_bps) / 10000.0)
                     capital += pnl
                     positions.append({
                         "entry": open_position["entry"],
@@ -158,6 +169,7 @@ def run_backtest(candles: List[dict], conditions: List[dict],
                     quantity = (initial_capital * 0.1) / current_price  # 10% of capital
                     open_position = {
                         "entry": current_price,
+                        "entry_notional": quantity * current_price,
                         "stop_loss": stop_loss,
                         "take_profit": take_profit,
                         "side": side,
@@ -184,6 +196,7 @@ def run_backtest(candles: List[dict], conditions: List[dict],
             pnl = (last_price - open_position["entry"]) * open_position["quantity"]
         else:
             pnl = (open_position["entry"] - last_price) * open_position["quantity"]
+        pnl -= open_position["entry_notional"] * ((fee_bps + slippage_bps) / 10000.0)
         capital += pnl
         positions.append({
             "entry": open_position["entry"],
@@ -256,6 +269,8 @@ def run_backtest(candles: List[dict], conditions: List[dict],
         "profit_factor": round(profit_factor, 2),
         "avg_win": round(avg_win, 2),
         "avg_loss": round(avg_loss, 2),
+        "fee_bps": fee_bps,
+        "slippage_bps": slippage_bps,
         "equity_curve": equity_curve,
         "trade_log": trade_log,
     }

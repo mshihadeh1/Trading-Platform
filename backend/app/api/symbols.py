@@ -24,7 +24,12 @@ async def add_symbol(item: SymbolCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=409, detail=f"Symbol {item.symbol} already exists on {item.exchange}")
 
-    symbol = Symbol(**item.model_dump())
+    symbol = Symbol(
+        exchange=item.exchange,
+        symbol_type=item.symbol_type,
+        symbol=item.symbol,
+        display_name=item.display_name or item.symbol,
+    )
     db.add(symbol)
     db.commit()
     db.refresh(symbol)

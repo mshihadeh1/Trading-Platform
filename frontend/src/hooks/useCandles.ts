@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { candles } from '../lib/api';
-import type { CandleData, SymbolInfo } from '../types';
+import { candles as candlesApi } from '../lib/api';
+import type { CandleData } from '../types';
 
 export function useCandles(symbolId: number | null, limit: number = 200) {
   const [candles, setCandles] = useState<CandleData[]>([]);
@@ -12,7 +12,7 @@ export function useCandles(symbolId: number | null, limit: number = 200) {
     if (!symbolId) return;
     try {
       setLoading(true);
-      const data = await candles.list(symbolId, limit);
+      const data = await candlesApi.list(symbolId, limit);
       // Convert timestamps from string to number (ms)
       const formatted: CandleData[] = data.candles.map((c: any) => ({
         timestamp: new Date(c.timestamp).getTime(),

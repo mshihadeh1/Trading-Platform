@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SignalCreate(BaseModel):
@@ -31,8 +31,7 @@ class SignalResponse(BaseModel):
     analysis_type: str
     raw_response: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SignalResponseWithSymbol(SignalResponse):

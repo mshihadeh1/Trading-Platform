@@ -27,9 +27,12 @@ export function useWatchlist() {
     const trimmed = newSymbol.trim().toUpperCase();
     if (!trimmed) return;
     try {
-      const exchange = trimmed.endsWith('-USD') ? 'yahoo_finance' : 'hyperliquid';
-      const symbolName = trimmed.replace('-USD', '');
-      await watchlist.add(symbolName, exchange);
+      const isYahooSymbol = trimmed.endsWith('-USD') || /^[A-Z.]+$/.test(trimmed);
+      const exchange = isYahooSymbol ? 'yahoo' : 'hyperliquid';
+      const symbolName = exchange === 'yahoo' ? trimmed : trimmed.replace('-USD', '');
+      const symbolType = trimmed.endsWith('-USD') ? 'crypto' : exchange === 'yahoo' ? 'stock' : 'perp';
+      const displayName = exchange === 'hyperliquid' ? `${symbolName}-PERP` : symbolName;
+      await watchlist.add(symbolName, exchange, symbolType, displayName);
       setNewSymbol('');
       await load();
     } catch (e: any) {

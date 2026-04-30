@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.utils.time import utc_now
 from typing import Optional
 from sqlmodel import Field, SQLModel
 
@@ -8,6 +9,11 @@ class BacktestResult(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     strategy_id: int = Field(foreign_key="strategies.id")
+    symbol_id: Optional[int] = Field(default=None, foreign_key="symbols.symbol_id")
+    timeframe: str = "1h"
+    initial_capital: float = 10000.0
+    fee_bps: float = 10.0
+    slippage_bps: float = 5.0
     start_date: datetime
     end_date: datetime
     win_rate: float = 0.0
@@ -22,4 +28,4 @@ class BacktestResult(SQLModel, table=True):
     avg_loss: float = 0.0
     equity_curve: Optional[str] = None  # JSON string
     trade_log: Optional[str] = None  # JSON string
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)

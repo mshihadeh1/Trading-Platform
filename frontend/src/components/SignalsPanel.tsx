@@ -21,6 +21,21 @@ const directionLabel: Record<string, string> = {
 export function SignalsPanel({ signals, loading, error }: Props) {
   if (error) return <div className="text-red-400 p-4">Error loading signals: {error}</div>;
 
+  const riskReward = (signal: Signal) => {
+    if (!signal.entry_price || !signal.stop_loss || !signal.take_profit) return null;
+    if (signal.direction === 'buy') {
+      const risk = signal.entry_price - signal.stop_loss;
+      const reward = signal.take_profit - signal.entry_price;
+      return risk > 0 ? reward / risk : null;
+    }
+    if (signal.direction === 'sell') {
+      const risk = signal.stop_loss - signal.entry_price;
+      const reward = signal.entry_price - signal.take_profit;
+      return risk > 0 ? reward / risk : null;
+    }
+    return null;
+  };
+
   return (
     <div className="bg-dark-800 rounded-lg border border-dark-600 overflow-hidden">
       <div className="px-4 py-3 border-b border-dark-600">
@@ -35,7 +50,7 @@ export function SignalsPanel({ signals, loading, error }: Props) {
           {signals.map(signal => (
             <div key={signal.id} className="px-4 py-3 border-b border-dark-700 hover:bg-dark-700/50">
               <div className="flex items-center justify-between mb-1">
-                <span className="font-bold text-sm">{signal.symbol}</span>
+                <span className="font-bold text-sm">{signal.display_name ?? signal.symbol}</span>
                 <span className={`px-2 py-0.5 rounded text-xs font-bold ${directionColors[signal.direction] || ''}`}>
                   {directionLabel[signal.direction] || signal.direction}
                 </span>
@@ -45,12 +60,19 @@ export function SignalsPanel({ signals, loading, error }: Props) {
                 {signal.stop_loss && <span>SL: ${signal.stop_loss.toFixed(2)}</span>}
                 {signal.take_profit && <span>TP: ${signal.take_profit.toFixed(2)}</span>}
                 <span>Confidence: {signal.confidence}%</span>
+                {riskReward(signal) !== null && <span>R:R {riskReward(signal)?.toFixed(2)}x</span>}
               </div>
+              {signal.confidence < 65 && (
+                <div className="text-xs text-yellow-400 mb-1">Below auto-trade confidence threshold</div>
+              )}
+              {signal.paper_trade_id && (
+                <div className="text-xs text-blue-300 mb-1">Paper trade #{signal.paper_trade_id} opened</div>
+              )}
               {signal.reasoning && (
                 <p className="text-xs text-gray-500 mt-1 line-clamp-2">{signal.reasoning}</p>
               )}
               <div className="text-xs text-gray-600 mt-1">
-                {new Date(signal.timestamp).toLocaleString()}
+                {signal.timestamp ? new Date(signal.timestamp).toLocaleString() : 'Pending timestamp'}
               </div>
             </div>
           ))}

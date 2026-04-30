@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, ColorType, CrosshairMode } from 'lightweight-charts';
-import type { CandleData as LDChartData, ISeriesLineSeries } from 'lightweight-charts';
 import type { CandleData } from '../types';
 
 interface Props {
@@ -71,13 +70,15 @@ export function Chart({ candles, symbol, height = 500 }: Props) {
   useEffect(() => {
     if (!chartRef.current) return;
 
-    const data: LDChartData[] = candles.map((c) => ({
-      time: Math.floor(c.timestamp / 1000),
+    const data = candles.map((c) => ({
+      time: typeof c.timestamp === 'number'
+        ? Math.floor(c.timestamp / 1000)
+        : Math.floor(new Date(c.timestamp).getTime() / 1000),
       open: c.open,
       high: c.high,
       low: c.low,
       close: c.close,
-    }));
+    })).filter((c) => Number.isFinite(c.time));
 
     chartRef.current.candleSeries.setData(data);
 

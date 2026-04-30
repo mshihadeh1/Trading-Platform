@@ -36,6 +36,37 @@ async def get_candles(symbol_id: int, db: Session = Depends(get_db),
     )
 
 
+@router.post("/fetch/all")
+async def fetch_all_candles(
+    timeframe: str = Query(default="1h"),
+    db: Session = Depends(get_db)
+):
+    """
+    Fetch and store candles for all symbols in the watchlist.
+    """
+    collector = CandleCollector(db=db)
+    
+    try:
+        # Fetch from Hyperliquid
+        hl_results = await collector.collect_all_hyperliquid(db=db)
+        
+        # Fetch from Yahoo Finance
+        yf_results = collector.collect_all_yahoo(db=db)
+        
+        total_stored = sum(hl_results.values()) + sum(yf_results.values())
+        
+        return {
+            "message": f"Fetched candles for {len(hl_results) + len(yf_results)} symbols",
+            "hyperliquid": hl_results,
+            "yahoo": yf_results,
+            "total_candles_stored": total_stored,
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/fetch/{symbol_id}")
 async def fetch_candles(
     symbol_id: int,
@@ -61,7 +92,7 @@ async def fetch_candles(
                 db=db
             )
         elif symbol.exchange == "yahoo":
-            count = collector.collect_symbol(
+            count = await collector.collect_symbol(
                 symbol=symbol.symbol,
                 exchange="yahoo",
                 interval=timeframe,
@@ -78,37 +109,6 @@ async def fetch_candles(
             "symbol": symbol.symbol,
             "exchange": symbol.exchange,
             "candles_stored": count,
-        }
-
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/fetch/all")
-async def fetch_all_candles(
-    timeframe: str = Query(default="1h"),
-    db: Session = Depends(get_db)
-):
-    """
-    Fetch and store candles for all symbols in the watchlist.
-    """
-    collector = CandleCollector(db=db)
-    
-    try:
-        # Fetch from Hyperliquid
-        hl_results = await collector.collect_all_hyperliquid(db=db)
-        
-        # Fetch from Yahoo Finance
-        yf_results = collector.collect_all_yahoo(db=db)
-        
-        total_stored = sum(hl_results.values()) + sum(yf_results.values())
-        
-        return {
-            "message": f"Fetched candles for {len(hl_results) + len(yf_results)} symbols",
-            "hyperliquid": hl_results,
-            "yahoo_finance": yf_results,
-            "total_candles_stored": total_stored,
         }
 
     except Exception as e:

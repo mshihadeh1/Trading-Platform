@@ -1,13 +1,13 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SymbolCreate(BaseModel):
     exchange: str
-    symbol_type: str
+    symbol_type: str = "perp"
     symbol: str
-    display_name: str
+    display_name: Optional[str] = None
 
 
 class SymbolUpdate(BaseModel):
@@ -25,5 +25,4 @@ class SymbolResponse(BaseModel):
     added_at: datetime
     is_active: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

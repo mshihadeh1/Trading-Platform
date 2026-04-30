@@ -3,16 +3,21 @@ import { Sidebar } from './components/Sidebar';
 import { Chart } from './components/Chart';
 import { SignalsPanel } from './components/SignalsPanel';
 import { PortfolioPanel } from './components/PortfolioPanel';
+import { SystemStatusPanel } from './components/SystemStatusPanel';
+import { TradeJournalPanel } from './components/TradeJournalPanel';
 import { useWatchlist } from './hooks/useWatchlist';
 import { useCandles } from './hooks/useCandles';
 import { useSignals } from './hooks/useSignals';
 import { usePortfolio } from './hooks/usePortfolio';
-import type { SymbolInfo, CandleData } from './types';
+import { useSystemStatus } from './hooks/useSystemStatus';
+import { candles as candlesApi, signals as signalsApi } from './lib/api';
+import type { SymbolInfo } from './types';
 
 export default function App() {
   const { symbols, loading, error, newSymbol, setNewSymbol, addSymbol, removeSymbol, reload } = useWatchlist();
   const { signals, loading: signalsLoading, error: signalsError, refetch: refetchSignals } = useSignals();
   const { summary, trades, loading: portfolioLoading, error: portfolioError, refetch: refetchPortfolio } = usePortfolio();
+  const { status: systemStatus, error: systemError, refetch: refetchSystemStatus } = useSystemStatus();
 
   const [activeSymbol, setActiveSymbol] = useState<SymbolInfo | null>(null);
   const [activeTab, setActiveTab] = useState<'chart' | 'portfolio'>('chart');
@@ -28,6 +33,18 @@ export default function App() {
   const handleAdd = async () => {
     await addSymbol();
     await reload();
+  };
+
+  const handleRefreshActiveSymbol = async () => {
+    if (!activeSymbol) return;
+    await candlesApi.refresh(activeSymbol.symbol_id);
+    await Promise.all([refetchCandles(), refetchSystemStatus()]);
+  };
+
+  const handleAnalyzeActiveSymbol = async () => {
+    if (!activeSymbol) return;
+    await signalsApi.trigger(activeSymbol.symbol);
+    await Promise.all([refetchSignals(), refetchPortfolio(), refetchSystemStatus()]);
   };
 
   return (
@@ -59,6 +76,22 @@ export default function App() {
             )}
           </div>
           <div className="flex gap-2">
+            {activeSymbol && (
+              <>
+                <button
+                  onClick={handleRefreshActiveSymbol}
+                  className="px-4 py-2 rounded text-sm font-medium bg-dark-700 text-gray-300 hover:bg-dark-600"
+                >
+                  Refresh Candles
+                </button>
+                <button
+                  onClick={handleAnalyzeActiveSymbol}
+                  className="px-4 py-2 rounded text-sm font-medium bg-emerald-700 text-white hover:bg-emerald-600"
+                >
+                  Analyze Now
+                </button>
+              </>
+            )}
             <button
               onClick={() => setActiveTab('chart')}
               className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
@@ -109,16 +142,20 @@ export default function App() {
 
               {/* Signals */}
               <SignalsPanel signals={signals} loading={signalsLoading} error={signalsError} />
+              <SystemStatusPanel status={systemStatus} error={systemError} />
             </>
           )}
 
           {activeTab === 'portfolio' && (
-            <PortfolioPanel
-              summary={summary}
-              trades={trades}
-              loading={portfolioLoading}
-              error={portfolioError}
-            />
+            <>
+              <PortfolioPanel
+                summary={summary}
+                trades={trades}
+                loading={portfolioLoading}
+                error={portfolioError}
+              />
+              <TradeJournalPanel trades={trades} loading={portfolioLoading} error={portfolioError} />
+            </>
           )}
         </div>
 
@@ -126,6 +163,13 @@ export default function App() {
         <div className="px-6 py-2 border-t border-dark-600 text-xs text-gray-600 flex justify-between">
           <span>{symbols.length} symbols • {signals.length} signals</span>
           <div className="flex gap-4">
+            <span className={systemStatus?.components.redis && systemStatus?.components.llm_endpoint ? 'text-green-400' : 'text-yellow-400'}>
+              {systemError
+                ? 'Status unavailable'
+                : systemStatus?.latest_candle
+                  ? `${systemStatus.latest_candle.symbol} candle age ${Math.floor(systemStatus.latest_candle.age_seconds / 60)}m`
+                  : 'Waiting for status'}
+            </span>
             <button onClick={reload} className="hover:text-gray-400">Refresh Watchlist</button>
             <button onClick={refetchSignals} className="hover:text-gray-400">Refresh Signals</button>
             <button onClick={refetchPortfolio} className="hover:text-gray-400">Refresh Portfolio</button>

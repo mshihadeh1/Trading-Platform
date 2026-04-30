@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class PaperTradeCreate(BaseModel):
@@ -20,6 +20,7 @@ class PaperTradeResponse(BaseModel):
     direction: str
     entry_price: float
     quantity: float
+    current_price: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
     take_profit_2: Optional[float] = None
@@ -30,10 +31,11 @@ class PaperTradeResponse(BaseModel):
     entry_time: datetime
     exit_time: Optional[datetime] = None
     strategy_id: Optional[int] = None
+    source_signal_id: Optional[int] = None
+    close_reason: Optional[str] = None
     notes: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PortfolioSummary(BaseModel):

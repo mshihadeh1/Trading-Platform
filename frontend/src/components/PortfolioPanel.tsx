@@ -56,6 +56,7 @@ export function PortfolioPanel({ summary, trades, loading, error }: Props) {
                     <th className="px-4 py-2 text-left">Symbol</th>
                     <th className="px-4 py-2 text-left">Side</th>
                     <th className="px-4 py-2 text-right">Entry</th>
+                    <th className="px-4 py-2 text-right">Current</th>
                     <th className="px-4 py-2 text-right">SL</th>
                     <th className="px-4 py-2 text-right">TP</th>
                     <th className="px-4 py-2 text-right">P&L</th>
@@ -66,10 +67,11 @@ export function PortfolioPanel({ summary, trades, loading, error }: Props) {
                   {trades.slice(0, 20).map(trade => (
                     <tr key={trade.id} className="border-b border-dark-700 hover:bg-dark-700/30">
                       <td className="px-4 py-2 font-medium">{trade.symbol}</td>
-                      <td className={`px-4 py-2 text-xs font-bold uppercase ${trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-                        {trade.side}
+                      <td className={`px-4 py-2 text-xs font-bold uppercase ${(trade.side ?? trade.direction) === 'buy' || (trade.side ?? trade.direction) === 'long' ? 'text-green-400' : 'text-red-400'}`}>
+                        {trade.side ?? trade.direction ?? '-'}
                       </td>
                       <td className="px-4 py-2 text-right">${trade.entry_price.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right">{trade.current_price ? `$${trade.current_price.toFixed(2)}` : '-'}</td>
                       <td className="px-4 py-2 text-right text-red-400">{trade.stop_loss ? `$${trade.stop_loss.toFixed(2)}` : '-'}</td>
                       <td className="px-4 py-2 text-right text-green-400">{trade.take_profit ? `$${trade.take_profit.toFixed(2)}` : '-'}</td>
                       <td className={`px-4 py-2 text-right font-medium ${pnlClass(trade.pnl)}`}>
@@ -84,6 +86,7 @@ export function PortfolioPanel({ summary, trades, loading, error }: Props) {
                         }`}>
                           {trade.status}
                         </span>
+                        {trade.close_reason && <div className="text-[10px] text-gray-500 mt-1">{trade.close_reason}</div>}
                       </td>
                     </tr>
                   ))}

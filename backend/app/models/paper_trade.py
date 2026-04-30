@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.utils.time import utc_now
 from typing import Optional
 from sqlmodel import Field, SQLModel
 
@@ -18,7 +19,10 @@ class PaperTrade(SQLModel, table=True):
     exit_price: Optional[float] = None
     pnl: float = 0.0
     pnl_pct: float = 0.0
-    entry_time: datetime = Field(default_factory=datetime.utcnow)
+    current_price: Optional[float] = None
+    entry_time: datetime = Field(default_factory=utc_now)
     exit_time: Optional[datetime] = None
     strategy_id: Optional[int] = Field(default=None, foreign_key="strategies.id")
+    source_signal_id: Optional[int] = Field(default=None, foreign_key="signals.id")
+    close_reason: Optional[str] = None
     notes: Optional[str] = None

@@ -1,6 +1,7 @@
 """Asset watchlist models."""
 
 from datetime import datetime
+from app.utils.time import utc_now
 from typing import Optional
 
 from pydantic import BaseModel
@@ -14,7 +15,7 @@ class Asset(SQLModel, table=True):
     exchange: str = "HYPERLIQUID"
     asset_type: str = "crypto"
     active: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class AssetCreate(BaseModel):

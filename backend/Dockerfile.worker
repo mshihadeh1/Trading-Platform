@@ -13,5 +13,5 @@ COPY . .
 # Create data directory
 RUN mkdir -p /app/data
 
-# Celery worker command
-CMD ["celery", "-A", "app.celery:celery_app", "worker", "--loglevel=info", "--concurrency=2", "--pool=solo"]
+# Run worker and beat in one container for the current compose topology
+CMD ["celery", "-A", "app.celery:celery_app", "worker", "--beat", "--loglevel=info", "--concurrency=2", "--pool=solo"]

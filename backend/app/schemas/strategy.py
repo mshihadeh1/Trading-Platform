@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ConditionItem(BaseModel):
@@ -12,7 +12,7 @@ class ConditionItem(BaseModel):
 class StrategyCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    conditions: List[ConditionItem] = []
+    conditions: List[ConditionItem] = Field(default_factory=list)
     timeframe: str = "1h"
     exchange: str = "hyperliquid"
 
@@ -30,12 +30,11 @@ class StrategyResponse(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
-    conditions: str  # JSON string
+    conditions: List[dict[str, Any]] = Field(default_factory=list)
     timeframe: str
     exchange: str
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

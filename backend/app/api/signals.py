@@ -38,17 +38,6 @@ async def get_signals(
     return signals
 
 
-@router.get("/{signal_id}", response_model=SignalResponseWithSymbol)
-async def get_signal(signal_id: int, db: Session = Depends(get_db)):
-    """Get a single signal by ID."""
-    signal = db.get(Signal, signal_id)
-    if not signal:
-        raise HTTPException(status_code=404, detail="Signal not found")
-
-    resp = SignalResponseWithSymbol.model_validate(signal)
-    return resp
-
-
 @router.get("/latest")
 async def get_latest_signal(
     symbol: str = Query(..., description="Symbol ticker"),
@@ -65,6 +54,17 @@ async def get_latest_signal(
     if not signal:
         return None
     return SignalResponse.model_validate(signal)
+
+
+@router.get("/{signal_id}", response_model=SignalResponseWithSymbol)
+async def get_signal(signal_id: int, db: Session = Depends(get_db)):
+    """Get a single signal by ID."""
+    signal = db.get(Signal, signal_id)
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    resp = SignalResponseWithSymbol.model_validate(signal)
+    return resp
 
 
 @router.post("/analyze/{symbol}")
