@@ -6,20 +6,25 @@ import { DailyBriefPanel } from './components/DailyBriefPanel';
 import { PortfolioPanel } from './components/PortfolioPanel';
 import { SystemStatusPanel } from './components/SystemStatusPanel';
 import { TradeJournalPanel } from './components/TradeJournalPanel';
+import { BacktestsPanel } from './components/BacktestsPanel';
 import { useWatchlist } from './hooks/useWatchlist';
 import { useCandles } from './hooks/useCandles';
 import { useSignals } from './hooks/useSignals';
 import { usePortfolio } from './hooks/usePortfolio';
 import { useSystemStatus } from './hooks/useSystemStatus';
 import { useDailyBrief } from './hooks/useDailyBrief';
+import { useBacktests } from './hooks/useBacktests';
+import { useBrowserNotifications } from './hooks/useBrowserNotifications';
+import { useRealtimeStream } from './hooks/useRealtimeStream';
 import { candles as candlesApi, signals as signalsApi } from './lib/api';
-import type { SymbolInfo } from './types';
+import type { Signal, SymbolInfo } from './types';
 
 export default function App() {
   const { symbols, loading, error, newSymbol, setNewSymbol, addSymbol, removeSymbol, reload } = useWatchlist();
   const { signals, loading: signalsLoading, error: signalsError, refetch: refetchSignals } = useSignals();
   const { summary, trades, loading: portfolioLoading, error: portfolioError, refetch: refetchPortfolio } = usePortfolio();
   const { status: systemStatus, error: systemError, refetch: refetchSystemStatus } = useSystemStatus();
+  const { results: backtests, loading: backtestsLoading, error: backtestsError, refetch: refetchBacktests } = useBacktests();
   const {
     brief: dailyBrief,
     loading: dailyBriefLoading,
@@ -29,7 +34,9 @@ export default function App() {
   } = useDailyBrief();
 
   const [activeSymbol, setActiveSymbol] = useState<SymbolInfo | null>(null);
-  const [activeTab, setActiveTab] = useState<'chart' | 'portfolio'>('chart');
+  const [activeTab, setActiveTab] = useState<'chart' | 'portfolio' | 'backtests'>('chart');
+  const notifications = useBrowserNotifications({ signals, trades, dailyBrief });
+  const realtime = useRealtimeStream();
 
   const { candles, loading: candlesLoading, error: candlesError, refetch: refetchCandles } = useCandles(
     activeSymbol?.symbol_id ?? null
@@ -54,6 +61,12 @@ export default function App() {
     if (!activeSymbol) return;
     await signalsApi.trigger(activeSymbol.symbol);
     await Promise.all([refetchSignals(), refetchPortfolio(), refetchSystemStatus()]);
+  };
+
+  const handleExecuteSignal = async (signal: Signal) => {
+    await signalsApi.execute(signal.id, 1);
+    await Promise.all([refetchSignals(), refetchPortfolio(), refetchSystemStatus()]);
+    setActiveTab('portfolio');
   };
 
   return (
@@ -83,6 +96,14 @@ export default function App() {
             ) : (
               <h2 className="text-xl font-bold text-gray-400">Select a symbol to view chart</h2>
             )}
+            {realtime.snapshot?.latest_candle && (
+              <span className="text-xs text-gray-400">
+                Live {realtime.snapshot.latest_candle.symbol}: ${realtime.snapshot.latest_candle.close.toFixed(2)}
+              </span>
+            )}
+            <span className={`text-xs ${realtime.connected ? 'text-green-400' : 'text-yellow-400'}`}>
+              {realtime.connected ? 'WS live' : 'WS reconnecting'}
+            </span>
           </div>
           <div className="flex gap-2">
             {activeSymbol && (
@@ -117,6 +138,22 @@ export default function App() {
             >
               Portfolio
             </button>
+            <button
+              onClick={() => setActiveTab('backtests')}
+              className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                activeTab === 'backtests' ? 'bg-blue-600 text-white' : 'bg-dark-700 text-gray-400 hover:bg-dark-600'
+              }`}
+            >
+              Backtests
+            </button>
+            {notifications.supported && notifications.permission !== 'granted' && (
+              <button
+                onClick={notifications.requestPermission}
+                className="px-4 py-2 rounded text-sm font-medium bg-purple-700 text-white hover:bg-purple-600"
+              >
+                Enable Alerts
+              </button>
+            )}
           </div>
         </div>
 
@@ -159,7 +196,12 @@ export default function App() {
               </div>
 
               {/* Signals */}
-              <SignalsPanel signals={signals} loading={signalsLoading} error={signalsError} />
+              <SignalsPanel
+                signals={signals}
+                loading={signalsLoading}
+                error={signalsError}
+                onExecute={handleExecuteSignal}
+              />
               <SystemStatusPanel status={systemStatus} error={systemError} />
             </>
           )}
@@ -174,6 +216,15 @@ export default function App() {
               />
               <TradeJournalPanel trades={trades} loading={portfolioLoading} error={portfolioError} />
             </>
+          )}
+
+          {activeTab === 'backtests' && (
+            <BacktestsPanel
+              results={backtests}
+              loading={backtestsLoading}
+              error={backtestsError}
+              onRefresh={refetchBacktests}
+            />
           )}
         </div>
 

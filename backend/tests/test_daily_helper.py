@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import SQLModel, Session, create_engine
+from sqlmodel import SQLModel, Session, create_engine, select
 
 import app.models  # noqa: F401 - ensure SQLModel metadata includes every table
 from app.database import get_db
@@ -149,6 +149,67 @@ def test_health_status_reports_named_components_and_freshness(client, db_session
     assert payload["data"]["latest_candle_at"] is not None
     assert payload["data"]["fresh"] is True
     assert payload["signals"]["latest_signal_at"] is not None
+
+
+def test_execute_signal_creates_linked_paper_trade(client, db_session):
+    symbol = add_symbol(db_session)
+    db_session.add(
+        Signal(
+            symbol_id=symbol.symbol_id,
+            symbol="BTC",
+            exchange="hyperliquid",
+            direction="buy",
+            confidence=85,
+            entry_price=100.0,
+            entry_min=99.0,
+            entry_max=101.0,
+            stop_loss=95.0,
+            take_profit=110.0,
+            take_profit_2=120.0,
+            risk_reward=2.0,
+            reasoning="High-confidence test setup.",
+        )
+    )
+    db_session.commit()
+    signal = db_session.exec(select(Signal)).first()
+
+    response = client.post(f"/api/signals/{signal.id}/execute", json={"quantity": 2.0})
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["source_signal_id"] == signal.id
+    assert payload["symbol_id"] == symbol.symbol_id
+    assert payload["direction"] == "long"
+    assert payload["entry_price"] == 100.0
+    assert payload["quantity"] == 2.0
+    assert payload["stop_loss"] == 95.0
+    assert payload["take_profit"] == 110.0
+    assert payload["take_profit_2"] == 120.0
+
+    db_session.refresh(signal)
+    assert signal.paper_trade_id == payload["id"]
+
+
+def test_execute_signal_rejects_hold_signal(client, db_session):
+    symbol = add_symbol(db_session)
+    db_session.add(
+        Signal(
+            symbol_id=symbol.symbol_id,
+            symbol="BTC",
+            exchange="hyperliquid",
+            direction="hold",
+            confidence=50,
+            entry_price=100.0,
+            reasoning="No trade.",
+        )
+    )
+    db_session.commit()
+    signal = db_session.exec(select(Signal)).first()
+
+    response = client.post(f"/api/signals/{signal.id}/execute")
+
+    assert response.status_code == 400
+    assert "hold" in response.json()["detail"].lower()
 
 
 def test_llm_parser_normalizes_structured_signal_fields():

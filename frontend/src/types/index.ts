@@ -119,13 +119,20 @@ export interface BacktestResult {
   initial_capital?: number;
   fee_bps?: number;
   slippage_bps?: number;
-  total_trades: number;
+  start_date?: string;
+  end_date?: string;
+  total_trades?: number;
+  trades_count?: number;
   win_rate: number;
   total_return: number;
-  total_return_pct: number;
+  total_return_pct?: number;
   max_drawdown: number;
   sharpe_ratio: number;
+  sortino_ratio?: number;
   profit_factor: number;
+  avg_trade_duration_hours?: number;
+  avg_win?: number;
+  avg_loss?: number;
   equity_curve: { timestamp: string; equity: number }[];
   trade_log: {
     entry_time: string;
@@ -136,6 +143,7 @@ export interface BacktestResult {
     pnl: number;
     reason: string;
   }[];
+  created_at?: string;
   error?: string;
 }
 

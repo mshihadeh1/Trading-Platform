@@ -35,6 +35,11 @@ export const signals = {
   list: (limit: number = 50) => fetchJson<import('../types').Signal[]>(`/signals?limit=${limit}`),
   trigger: (symbol: string) =>
     fetchJson<{ task_id: string }>(`/signals/analyze/${symbol}`, { method: 'POST' }),
+  execute: (signalId: number, quantity: number = 1) =>
+    fetchJson<import('../types').Trade>(`/signals/${signalId}/execute`, {
+      method: 'POST',
+      body: JSON.stringify({ quantity }),
+    }),
 };
 
 // Trades / Portfolio
@@ -52,6 +57,10 @@ export const dailyBrief = {
   latest: () => fetchJson<import('../types').DailyBrief | null>('/daily-brief/latest'),
   history: (limit: number = 20) => fetchJson<import('../types').DailyBrief[]>(`/daily-brief/history?limit=${limit}`),
   generate: () => fetchJson<import('../types').DailyBrief>('/daily-brief/generate', { method: 'POST' }),
+};
+
+export const backtests = {
+  list: (limit: number = 20) => fetchJson<import('../types').BacktestResult[]>(`/backtest?limit=${limit}`),
 };
 
 export const system = {

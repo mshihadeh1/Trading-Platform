@@ -4,6 +4,7 @@ interface Props {
   signals: Signal[];
   loading: boolean;
   error: string | null;
+  onExecute?: (signal: Signal) => Promise<void> | void;
 }
 
 const directionColors: Record<string, string> = {
@@ -18,7 +19,7 @@ const directionLabel: Record<string, string> = {
   hold: '🟡 HOLD',
 };
 
-export function SignalsPanel({ signals, loading, error }: Props) {
+export function SignalsPanel({ signals, loading, error, onExecute }: Props) {
   if (error) return <div className="text-red-400 p-4">Error loading signals: {error}</div>;
 
   const riskReward = (signal: Signal) => {
@@ -76,6 +77,14 @@ export function SignalsPanel({ signals, loading, error }: Props) {
               )}
               {signal.paper_trade_id && (
                 <div className="text-xs text-blue-300 mb-1">Paper trade #{signal.paper_trade_id} opened</div>
+              )}
+              {!signal.paper_trade_id && signal.direction !== 'hold' && onExecute && (
+                <button
+                  onClick={() => onExecute(signal)}
+                  className="mt-2 px-3 py-1 rounded bg-blue-700 text-white text-xs font-semibold hover:bg-blue-600"
+                >
+                  Execute Paper Trade
+                </button>
               )}
               {signal.reasoning && (
                 <p className="text-xs text-gray-500 mt-1 line-clamp-2">{signal.reasoning}</p>

@@ -17,6 +17,7 @@ from app.api import (
     daily_brief,
     health,
     portfolio,
+    realtime,
     signals,
     strategies,
     symbols,
@@ -69,6 +70,7 @@ app.include_router(strategies.router, prefix="/api/strategies", tags=["strategie
 app.include_router(backtest.router, prefix="/api/backtest", tags=["backtest"])
 app.include_router(config_api.router, prefix="/api/config", tags=["config"])
 app.include_router(daily_brief.router, prefix="/api/daily-brief", tags=["daily brief"])
+app.include_router(realtime.router, tags=["realtime"])
 app.include_router(assets.router)
 app.include_router(trade.router)
 

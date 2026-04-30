@@ -8,9 +8,12 @@ AI-powered trading dashboard combining technical analysis from Python with reaso
 - **Candlestick charts** — real-time and historical OHLCV data via TradingView Lightweight Charts
 - **AI signals** — Python computes indicators, LLM generates reasoning and structured buy/sell signals (setup type, time horizon, entry zone, risk/reward, invalidation)
 - **Daily brief** — consolidated market overview: regime, top opportunities with entry/stop/target, open positions summary, and risk notes
+- **Manual signal execution** — convert buy/sell signals into linked paper trades directly from the dashboard
 - **Paper trading** — simulated portfolio with P&L tracking, stop-loss and take-profit
 - **Strategy builder** — define and manage custom trading strategies
-- **Backtesting** — walk historical candles through a strategy and get metrics (win rate, Sharpe, max drawdown)
+- **Backtesting dashboard** — review saved backtests with metrics, equity curve, and simulated trade log
+- **Browser alerts** — opt-in desktop notifications for high-confidence signals, closed paper trades, and new daily briefs
+- **Realtime stream** — lightweight WebSocket snapshots for live dashboard status and latest candle updates
 - **Trade journal** — log and review past paper trades
 - **System status** — monitor backend services, Redis, LLM endpoint, Celery worker health, data freshness, and risk limits
 - **Scheduled analysis** — automatic analysis of watchlist symbols every 4 hours; daily brief every 24 hours
@@ -204,23 +207,28 @@ All routes are prefixed with `/api/`. Full interactive docs at `http://localhost
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/health` | Service health check |
+| GET | `/api/health/status` | Detailed service, data freshness, worker, and risk status |
 | GET | `/api/config` | Current configuration |
-| GET | `/api/symbols` | List all watchlist symbols |
-| GET | `/api/symbols/{symbol}` | Symbol detail |
-| POST | `/api/symbols` | Add symbol to watchlist |
-| DELETE | `/api/symbols/{symbol}` | Remove symbol |
+| GET | `/api/watchlist` | List all watchlist symbols |
+| POST | `/api/watchlist` | Add symbol to watchlist |
+| DELETE | `/api/watchlist/{symbol_id}` | Remove symbol from the active watchlist |
+| POST | `/api/watchlist/seed` | Seed default Hyperliquid and Yahoo Finance symbols |
 | GET | `/api/candles/{symbol}` | OHLCV candle data |
 | GET | `/api/signals` | List AI-generated signals |
-| GET | `/api/signals/{symbol}` | Latest signals for a symbol |
+| GET | `/api/signals/{signal_id}` | Get one signal by ID |
+| GET | `/api/signals/latest?symbol=SYMBOL` | Latest signal for a symbol |
 | POST | `/api/signals/analyze/{symbol}` | Trigger on-demand analysis |
+| POST | `/api/signals/{signal_id}/execute` | Create or return a linked paper trade for a buy/sell signal |
 | GET | `/api/daily-brief/latest` | Latest daily market brief |
 | GET | `/api/daily-brief/history` | Historical daily briefs |
 | POST | `/api/daily-brief/generate` | Generate a new daily brief on demand |
 | GET | `/api/portfolio` | Portfolio summary and P&L |
-| POST | `/api/portfolio/trade` | Execute a paper trade |
+| POST | `/api/portfolio/trade` | Execute a paper trade manually |
 | GET | `/api/strategies` | List strategies |
 | POST | `/api/strategies` | Create a strategy |
-| POST | `/api/backtest` | Run a backtest |
+| GET | `/api/backtest` | List saved backtest results |
+| POST | `/api/backtest/run` | Run a backtest |
+| WS | `/ws/stream` | Realtime dashboard snapshot stream |
 
 ## Data Sources
 
@@ -286,22 +294,31 @@ The `/api/health/status` endpoint now reports:
 
 - **Simulated balance:** configurable via `INITIAL_CAPITAL` (default: 10,000)
 - **Position sizing:** max position percentage configurable via `MAX_POSITION_PCT` (default: 10%)
+- **Manual trades:** create paper trades directly from the portfolio API/UI
+- **Signal execution:** buy/sell signals can be converted into linked paper trades with `POST /api/signals/{signal_id}/execute`; hold signals are intentionally rejected
 - **Stop-loss / Take-profit:** checked every 30 seconds by the Celery worker
 - **Trade journal:** all trades logged with entry/exit, P&L, and signal reference
+
+## Realtime Dashboard and Alerts
+
+- `/ws/stream` emits a dashboard snapshot every 5 seconds with the latest candle, latest signal, open position count, and unrealized P&L
+- The frontend displays WebSocket connection status and latest streamed candle price in the header
+- The frontend includes opt-in browser notifications via the browser Notification API
+- Alerts currently fire from dashboard data for high-confidence buy/sell signals, paper trades that close, and new daily briefs
 
 ## Backtesting
 
 - Walk historical candles through a strategy rule set
 - Returns: equity curve, win rate, max drawdown, total return, Sharpe ratio
-- Run via API or through the dashboard UI
+- Run via `POST /api/backtest/run`
+- Review saved backtests through the dashboard Backtests tab, including metrics, an equity curve preview, and recent simulated trades
 
 ## Future Work
 
 - [ ] Live trading support (beyond paper)
 - [ ] More technical indicators and strategy templates
-- [ ] Real-time WebSocket price updates in the frontend
+- [ ] Backend-managed push notifications beyond browser-local alerts
 - [ ] User accounts and multi-user support
-- [ ] Alerting (email, Telegram, push notifications)
 - [ ] Advanced risk management (position sizing algorithms)
 - [ ] Performance dashboards and analytics
 - [ ] Additional data sources (CoinGecko, Binance, etc.)
