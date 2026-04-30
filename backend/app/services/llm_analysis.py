@@ -1,6 +1,7 @@
 """LLM-driven market analysis and signal persistence."""
 
 import asyncio
+import inspect
 import json
 import logging
 from datetime import datetime
@@ -69,12 +70,25 @@ class LLMAnalysisService:
         model: Optional[str] = None,
         timeout_seconds: float = 15.0,
     ):
+        self.base_url = base_url or settings.llm_base_url
+        self.api_key = api_key or settings.llm_api_key
         self.model = model or settings.llm_model
-        self.client = AsyncOpenAI(
-            base_url=base_url or settings.llm_base_url,
-            api_key=api_key or settings.llm_api_key,
-            timeout=timeout_seconds,
+        self.timeout_seconds = timeout_seconds
+
+    def _create_client(self) -> AsyncOpenAI:
+        return AsyncOpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            timeout=self.timeout_seconds,
         )
+
+    async def _close_client(self, client: AsyncOpenAI) -> None:
+        close = getattr(client, "close", None) or getattr(client, "aclose", None)
+        if close is None:
+            return
+        result = close()
+        if inspect.isawaitable(result):
+            await result
 
     async def analyze(
         self,
@@ -101,31 +115,35 @@ class LLMAnalysisService:
             volume_analysis=volume_analysis,
         )
 
-        for attempt in range(3):
-            try:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": "Respond with valid JSON only."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.2,
-                    max_tokens=1000,
-                )
-                content = (response.choices[0].message.content or "").strip()
-                parsed = self._parse_response(content)
-                if parsed:
-                    return parsed
-                raise ValueError("Failed to parse JSON from model response")
-            except Exception as exc:
-                logger.warning(
-                    "LLM analysis attempt %s/3 failed for %s: %s",
-                    attempt + 1,
-                    symbol,
-                    exc,
-                )
-                if attempt < 2:
-                    await asyncio.sleep(2**attempt)
+        client = self._create_client()
+        try:
+            for attempt in range(3):
+                try:
+                    response = await client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": "Respond with valid JSON only."},
+                            {"role": "user", "content": prompt},
+                        ],
+                        temperature=0.2,
+                        max_tokens=1000,
+                    )
+                    content = (response.choices[0].message.content or "").strip()
+                    parsed = self._parse_response(content)
+                    if parsed:
+                        return parsed
+                    raise ValueError("Failed to parse JSON from model response")
+                except Exception as exc:
+                    logger.warning(
+                        "LLM analysis attempt %s/3 failed for %s: %s",
+                        attempt + 1,
+                        symbol,
+                        exc,
+                    )
+                    if attempt < 2:
+                        await asyncio.sleep(2**attempt)
+        finally:
+            await self._close_client(client)
 
         return None
 

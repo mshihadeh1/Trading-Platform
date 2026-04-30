@@ -22,6 +22,8 @@ def evaluate_condition(indicator: str, operator: str, value: float, actual: floa
         return actual <= value
     elif operator == "gte":
         return actual >= value
+    elif operator == "eq":
+        return actual == value
     elif operator == "crosses_above":
         return actual > value
     elif operator == "crosses_below":

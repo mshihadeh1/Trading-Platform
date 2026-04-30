@@ -7,6 +7,8 @@ import { PortfolioPanel } from './components/PortfolioPanel';
 import { SystemStatusPanel } from './components/SystemStatusPanel';
 import { TradeJournalPanel } from './components/TradeJournalPanel';
 import { BacktestsPanel } from './components/BacktestsPanel';
+import { RiskStrategyPanel } from './components/RiskStrategyPanel';
+import { PerformancePanel } from './components/PerformancePanel';
 import { useWatchlist } from './hooks/useWatchlist';
 import { useCandles } from './hooks/useCandles';
 import { useSignals } from './hooks/useSignals';
@@ -35,7 +37,7 @@ export default function App() {
 
   const [activeSymbol, setActiveSymbol] = useState<SymbolInfo | null>(null);
   const [activeTab, setActiveTab] = useState<'chart' | 'portfolio' | 'backtests'>('chart');
-  const notifications = useBrowserNotifications({ signals, trades, dailyBrief });
+  const notifications = useBrowserNotifications({ signals, trades, dailyBrief, systemStatus });
   const realtime = useRealtimeStream();
 
   const { candles, loading: candlesLoading, error: candlesError, refetch: refetchCandles } = useCandles(
@@ -170,6 +172,8 @@ export default function App() {
                 onGenerate={generateDailyBrief}
               />
 
+              <RiskStrategyPanel activeSymbol={activeSymbol} />
+
               {/* Chart */}
               <div className="bg-dark-800 rounded-lg border border-dark-600 p-4">
                 {activeSymbol ? (
@@ -208,6 +212,7 @@ export default function App() {
 
           {activeTab === 'portfolio' && (
             <>
+              <PerformancePanel />
               <PortfolioPanel
                 summary={summary}
                 trades={trades}

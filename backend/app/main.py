@@ -18,6 +18,7 @@ from app.api import (
     health,
     portfolio,
     realtime,
+    risk,
     signals,
     strategies,
     symbols,
@@ -66,6 +67,7 @@ app.include_router(symbols.router, prefix="/api/watchlist", tags=["watchlist"])
 app.include_router(candles.router, prefix="/api/candles", tags=["candles"])
 app.include_router(signals.router, prefix="/api/signals", tags=["signals"])
 app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
+app.include_router(risk.router, prefix="/api/risk", tags=["risk"])
 app.include_router(strategies.router, prefix="/api/strategies", tags=["strategies"])
 app.include_router(backtest.router, prefix="/api/backtest", tags=["backtest"])
 app.include_router(config_api.router, prefix="/api/config", tags=["config"])

@@ -31,7 +31,7 @@ class CandleCollector:
             {"symbol": "ARB", "coin": "ARB"},
             {"symbol": "OP", "coin": "OP"},
             {"symbol": "WIF", "coin": "WIF"},
-            {"symbol": "PEPE", "coin": "PEPE"},
+            {"symbol": "PEPE", "coin": "kPEPE"},
             {"symbol": "SUI", "coin": "SUI"},
             {"symbol": "LINK", "coin": "LINK"},
             {"symbol": "AAVE", "coin": "AAVE"},
@@ -92,16 +92,22 @@ class CandleCollector:
                 coin = perp["coin"]
                 break
 
+        end_time = int(datetime.now(timezone.utc).timestamp() * 1000)
+        start_time = end_time - (limit * ms)
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             payload = {
-                "type": "candle",
-                "startTime": int(datetime.now(timezone.utc).timestamp() * 1000) - (limit * ms),
-                "interval": ms,
-                "coin": coin,
+                "type": "candleSnapshot",
+                "req": {
+                    "coin": coin,
+                    "interval": interval,
+                    "startTime": start_time,
+                    "endTime": end_time,
+                },
             }
             try:
                 resp = await client.post(
-                    "https://api.hyperliquid.xyz",
+                    "https://api.hyperliquid.xyz/info",
                     json=payload,
                     headers={"Content-Type": "application/json"}
                 )
@@ -110,14 +116,24 @@ class CandleCollector:
 
                 candles = []
                 for c in raw:
-                    candles.append({
-                        "timestamp": datetime.fromtimestamp(c[0] / 1000, tz=timezone.utc),
-                        "open": float(c[1]),
-                        "high": float(c[2]),
-                        "low": float(c[3]),
-                        "close": float(c[4]),
-                        "volume": float(c[5]),
-                    })
+                    if isinstance(c, dict):
+                        candles.append({
+                            "timestamp": datetime.fromtimestamp(c["t"] / 1000, tz=timezone.utc),
+                            "open": float(c["o"]),
+                            "high": float(c["h"]),
+                            "low": float(c["l"]),
+                            "close": float(c["c"]),
+                            "volume": float(c["v"]),
+                        })
+                    else:
+                        candles.append({
+                            "timestamp": datetime.fromtimestamp(c[0] / 1000, tz=timezone.utc),
+                            "open": float(c[1]),
+                            "high": float(c[2]),
+                            "low": float(c[3]),
+                            "close": float(c[4]),
+                            "volume": float(c[5]),
+                        })
 
                 logger.info(f"Fetched {len(candles)} candles for {symbol}")
                 return candles

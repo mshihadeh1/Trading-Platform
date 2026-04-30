@@ -45,12 +45,40 @@ export const signals = {
 // Trades / Portfolio
 export const portfolio = {
   summary: () => fetchJson<import('../types').PortfolioSummary>('/portfolio/summary'),
+  performance: () => fetchJson<import('../types').PortfolioPerformance>('/portfolio/performance'),
   list: () => fetchJson<import('../types').Trade[]>('/portfolio'),
   execute: (data: { symbol: string; quantity: number; price: number; side: string }) =>
     fetchJson<import('../types').Trade>('/trades/execute', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+};
+
+export const risk = {
+  profile: () => fetchJson<import('../types').RiskProfile>('/risk/profile'),
+  positionSize: (data: {
+    symbol?: string;
+    direction: 'long' | 'short';
+    entry_price: number;
+    stop_loss: number;
+    account_equity?: number;
+    method: 'fixed_fractional' | 'volatility_atr' | 'kelly';
+    risk_pct?: number;
+    atr?: number;
+    atr_multiple?: number;
+    win_rate?: number;
+    reward_risk?: number;
+    max_position_pct?: number;
+  }) => fetchJson<import('../types').PositionSizeResponse>('/risk/position-size', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+};
+
+export const strategies = {
+  templates: () => fetchJson<import('../types').StrategyTemplate[]>('/strategies/templates'),
+  createFromTemplate: (templateId: string) =>
+    fetchJson<import('../types').Strategy>(`/strategies/templates/${templateId}/create`, { method: 'POST' }),
 };
 
 export const dailyBrief = {
@@ -61,6 +89,11 @@ export const dailyBrief = {
 
 export const backtests = {
   list: (limit: number = 20) => fetchJson<import('../types').BacktestResult[]>(`/backtest?limit=${limit}`),
+  optimize: (data: { base_conditions: Record<string, any>[]; parameter_grid: Record<string, number[]>; mock_metrics?: boolean }) =>
+    fetchJson<{ results: Array<Record<string, any>> }>('/backtest/optimize', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
 
 export const system = {

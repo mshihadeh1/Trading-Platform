@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -270,6 +271,56 @@ def test_auto_paper_trade_creates_trade_when_enabled(client, db_session, monkeyp
     assert signal.paper_trade_id == trade.id
     assert trade.source_signal_id == signal.id
     assert trade.direction == "long"
+
+
+def test_llm_analyze_closes_async_client_before_event_loop_exits(monkeypatch):
+    clients = []
+
+    class FakeMessage:
+        content = '{"direction":"hold","confidence":55,"reasoning":"No clean setup."}'
+
+    class FakeChoice:
+        message = FakeMessage()
+
+    class FakeResponse:
+        choices = [FakeChoice()]
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            return FakeResponse()
+
+    class FakeChat:
+        completions = FakeCompletions()
+
+    class FakeAsyncOpenAI:
+        chat = FakeChat()
+
+        def __init__(self, **kwargs):
+            self.closed = False
+            clients.append(self)
+
+        async def close(self):
+            self.closed = True
+
+    monkeypatch.setattr("app.services.llm_analysis.AsyncOpenAI", FakeAsyncOpenAI)
+    service = LLMAnalysisService(base_url="http://example.test/v1", api_key="test", model="test-model")
+
+    result = asyncio.run(
+        service.analyze(
+            symbol="BTC",
+            exchange="hyperliquid",
+            timeframe="1h",
+            price=100.0,
+            change_24h=1.2,
+            indicators={"rsi": 50, "price_action_summary": "Sideways"},
+            price_action="Sideways",
+            volume_analysis="Normal volume.",
+        )
+    )
+
+    assert result["direction"] == "hold"
+    assert clients
+    assert clients[0].closed is True
 
 
 def test_llm_parser_normalizes_structured_signal_fields():

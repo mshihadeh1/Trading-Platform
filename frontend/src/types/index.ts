@@ -202,8 +202,13 @@ export interface SystemStatus {
     closed_trades?: number;
     timeframe?: string;
   }>;
+  worker?: {
+    status: string;
+    last_heartbeat_at?: string;
+  };
   analysis_interval_hours: number;
   risk_limits: {
+    auto_trade_enabled?: boolean;
     auto_trade_min_confidence: number;
     max_open_trades: number;
     max_position_pct: number;
@@ -248,4 +253,67 @@ export interface DailyBrief {
   watchlist_snapshot: Record<string, any>[];
   llm_reasoning: string;
   created_at: string;
+}
+
+export interface RiskProfile {
+  initial_capital: number;
+  max_position_pct: number;
+  max_open_trades: number;
+  min_risk_reward_ratio: number;
+  auto_trade_enabled: boolean;
+  sizing_methods: string[];
+  default_risk_pct: number;
+  max_risk_pct: number;
+}
+
+export interface PositionSizeResponse {
+  symbol: string;
+  direction: string;
+  method: string;
+  entry_price: number;
+  stop_loss: number;
+  risk_per_unit: number;
+  recommended_risk_pct: number;
+  actual_risk_pct: number;
+  risk_amount: number;
+  quantity: number;
+  notional: number;
+  position_pct: number;
+  max_position_pct: number;
+  warnings: string[];
+}
+
+export interface StrategyTemplate {
+  id: string;
+  name: string;
+  description: string;
+  timeframe: string;
+  exchange: string;
+  category: string;
+  conditions: Record<string, any>[];
+  risk_profile: {
+    default_risk_pct: number;
+    stop_atr_multiple: number;
+    target_reward_risk: number;
+  };
+}
+
+export interface PortfolioPerformance {
+  initial_capital: number;
+  current_equity: number;
+  closed_equity: number;
+  total_return: number;
+  total_return_pct: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  total_trades: number;
+  open_positions: number;
+  win_rate: number;
+  profit_factor: number;
+  avg_win: number;
+  avg_loss: number;
+  max_drawdown: number;
+  monthly_pnl: Record<string, number>;
+  symbol_pnl: Record<string, number>;
+  equity_curve: { timestamp: string; equity: number; pnl: number; drawdown_pct: number }[];
 }

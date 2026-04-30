@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { BacktestResult } from '../types';
+import { backtests } from '../lib/api';
 
 interface Props {
   results: BacktestResult[];
@@ -12,6 +14,23 @@ function pct(value?: number) {
 }
 
 export function BacktestsPanel({ results, loading, error, onRefresh }: Props) {
+  const [optimizerResults, setOptimizerResults] = useState<Array<Record<string, any>>>([]);
+  const [optimizing, setOptimizing] = useState(false);
+
+  const runOptimizer = async () => {
+    setOptimizing(true);
+    try {
+      const response = await backtests.optimize({
+        base_conditions: [{ indicator: 'rsi', operator: 'lt', value: 30 }],
+        parameter_grid: { rsi: [25, 30, 35] },
+        mock_metrics: true,
+      });
+      setOptimizerResults(response.results);
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
   if (error) return <div className="text-red-400 p-4">Error loading backtests: {error}</div>;
 
   const latest = results[0];
@@ -24,10 +43,29 @@ export function BacktestsPanel({ results, loading, error, onRefresh }: Props) {
     <div className="bg-dark-800 rounded-lg border border-dark-600 overflow-hidden">
       <div className="px-4 py-3 border-b border-dark-600 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-300">📈 Backtesting</h2>
-        <button onClick={onRefresh} className="px-3 py-1 rounded text-xs bg-dark-700 text-gray-300 hover:bg-dark-600">
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button onClick={runOptimizer} className="px-3 py-1 rounded text-xs bg-purple-700 text-white hover:bg-purple-600" disabled={optimizing}>
+            {optimizing ? 'Optimizing...' : 'Optimize RSI'}
+          </button>
+          <button onClick={onRefresh} className="px-3 py-1 rounded text-xs bg-dark-700 text-gray-300 hover:bg-dark-600">
+            Refresh
+          </button>
+        </div>
       </div>
+
+      {optimizerResults.length > 0 && (
+        <div className="px-4 py-3 border-b border-dark-600 bg-dark-900/60">
+          <div className="text-xs text-gray-400 mb-2">Parameter optimizer preview</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {optimizerResults.slice(0, 3).map((row) => (
+              <div key={row.rank} className="bg-dark-800 border border-dark-700 rounded p-2 text-xs">
+                <div className="text-white font-semibold">Rank #{row.rank}: RSI {row.parameters?.rsi}</div>
+                <div className="text-gray-400">Score {row.score} • Win {row.win_rate}% • PF {row.profit_factor} • DD {row.max_drawdown}%</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="p-4 text-center text-gray-500">Loading backtests...</div>

@@ -24,14 +24,14 @@ HYPERLIQUID_PERPS = [
     {"symbol": "ARB", "display_name": "ARB-PERP", "coin": "ARB"},
     {"symbol": "OP", "display_name": "OP-PERP", "coin": "OP"},
     {"symbol": "WIF", "display_name": "WIF-PERP", "coin": "WIF"},
-    {"symbol": "PEPE", "display_name": "PEPE-PERP", "coin": "PEPE"},
+    {"symbol": "PEPE", "display_name": "PEPE-PERP", "coin": "kPEPE"},
     {"symbol": "SUI", "display_name": "SUI-PERP", "coin": "SUI"},
     {"symbol": "LINK", "display_name": "LINK-PERP", "coin": "LINK"},
     {"symbol": "AAVE", "display_name": "AAVE-PERP", "coin": "AAVE"},
     {"symbol": "FET", "display_name": "FET-PERP", "coin": "FET"},
 ]
 
-HYPERLIQUID_API = "https://api.hyperliquid.xyz"
+HYPERLIQUID_API = "https://api.hyperliquid.xyz/info"
 
 
 async def get_perpetual_symbols() -> list:

@@ -11,11 +11,14 @@ AI-powered trading dashboard combining technical analysis from Python with reaso
 - **Manual signal execution** — convert buy/sell signals into linked paper trades directly from the dashboard
 - **Paper trading** — simulated portfolio with P&L tracking, stop-loss and take-profit
 - **Strategy builder** — define and manage custom trading strategies
-- **Backtesting dashboard** — review saved backtests with metrics, equity curve, and simulated trade log
-- **Browser alerts** — opt-in desktop notifications for high-confidence signals, closed paper trades, and new daily briefs
+- **Strategy templates** — create pre-built RSI reversal, MACD trend, Bollinger squeeze, EMA pullback, and volume breakout strategies from the dashboard
+- **Risk management** — position sizing calculator for fixed-fractional, volatility/ATR, and quarter-Kelly sizing with max-exposure caps
+- **Backtesting dashboard** — review saved backtests with metrics, equity curve, simulated trade log, and quick parameter optimization previews
+- **Performance analytics** — portfolio performance dashboard with equity curve, max drawdown, monthly P&L, profit factor, average win/loss, and symbol P&L
+- **Browser alerts** — opt-in desktop notifications for high-confidence signals, stale data/worker/LLM warnings, closed paper trades, and new daily briefs
 - **Realtime stream** — lightweight WebSocket snapshots for live dashboard status and latest candle updates
-- **Trade journal** — log and review past paper trades
-- **System status** — monitor backend services, Redis, LLM endpoint, Celery worker health, data freshness, and risk limits
+- **Trade journal** — log and review paper trades with win rate, realized/unrealized P&L, average win/loss, and risk levels
+- **System status** — monitor backend services, Redis, LLM endpoint, Celery worker health, data freshness, daily brief readiness, task recency, and risk limits
 - **Scheduled analysis** — automatic analysis of watchlist symbols every 4 hours; daily brief every 24 hours
 
 ## Architecture
@@ -144,6 +147,18 @@ docker compose up -d --build
 
 Services start in order: Redis → Backend → Worker → Frontend.
 
+If another local service already owns port 3000, use a temporary uncommitted override:
+
+```yaml
+# docker-compose.override.yml
+services:
+  frontend:
+    ports: !override
+      - "3001:80"
+```
+
+Then open `http://localhost:3001` for that local smoke test. The committed default remains `http://localhost:3000`.
+
 ### 3. Open the Dashboard
 
 ```
@@ -227,12 +242,20 @@ All routes are prefixed with `/api/`. Full interactive docs at `http://localhost
 | GET | `/api/daily-brief/latest` | Latest daily market brief |
 | GET | `/api/daily-brief/history` | Historical daily briefs |
 | POST | `/api/daily-brief/generate` | Generate a new daily brief on demand |
-| GET | `/api/portfolio` | Portfolio summary and P&L |
-| POST | `/api/portfolio/trade` | Execute a paper trade manually |
+| GET | `/api/portfolio/summary` | Portfolio summary and P&L |
+| GET | `/api/portfolio/performance` | Portfolio performance analytics, equity curve, drawdown, monthly P&L, and symbol P&L |
+| GET | `/api/portfolio` | List paper trades |
+| POST | `/api/portfolio` | Create a manual paper trade |
+| GET | `/api/risk/profile` | Current risk limits and supported position sizing methods |
+| POST | `/api/risk/position-size` | Calculate fixed-fractional, volatility/ATR, or quarter-Kelly position size |
+| POST | `/api/trades/check` | Trigger paper trade SL/TP checks |
 | GET | `/api/strategies` | List strategies |
 | POST | `/api/strategies` | Create a strategy |
+| GET | `/api/strategies/templates` | List built-in strategy templates |
+| POST | `/api/strategies/templates/{template_id}/create` | Create a strategy from a built-in template |
 | GET | `/api/backtest` | List saved backtest results |
 | POST | `/api/backtest/run` | Run a backtest |
+| POST | `/api/backtest/optimize` | Rank parameter candidates for strategy optimization previews |
 | WS | `/ws/stream` | Realtime dashboard snapshot stream |
 
 ## Data Sources
@@ -254,12 +277,12 @@ All routes are prefixed with `/api/`. Full interactive docs at `http://localhost
 ## AI Analysis Pipeline
 
 1. **Fetch candles** — pull OHLCV data for the symbol
-2. **Compute indicators** — Python calculates RSI, MACD, Bollinger Bands, moving averages, etc.
+2. **Compute indicators** — Python calculates RSI, MACD, Bollinger Bands, moving averages, volume ratio, and derived strategy-template fields
 3. **Format prompt** — structured context with indicators, price action, and trend info
-4. **LLM reasoning** — Qwen3.6-35B generates analysis, reasoning, and a signal
+4. **LLM reasoning** — Qwen3.6-35B generates analysis, reasoning, and a normalized JSON signal through an OpenAI-compatible endpoint
 5. **Store signal** — result saved to SQLite for frontend display
 
-Analysis runs every 4 hours for all watchlist symbols via Celery Beat. You can also trigger it on demand via the API.
+Analysis runs every 4 hours for all watchlist symbols via Celery Beat. You can also trigger it on demand via the API. The LLM client is created and closed per analysis call so Celery tasks do not leak async HTTP clients across event-loop boundaries.
 
 ### Structured Signal Fields
 
@@ -299,6 +322,7 @@ The `/api/health/status` endpoint now reports:
 
 - **Simulated balance:** configurable via `INITIAL_CAPITAL` (default: 10,000)
 - **Position sizing:** max position percentage configurable via `MAX_POSITION_PCT` (default: 10%)
+- **Risk calculator:** `/api/risk/position-size` and the dashboard Risk Manager support fixed-fractional sizing, volatility/ATR sizing, and safer quarter-Kelly sizing. Calculations cap notional exposure to the configured max position percentage unless explicitly overridden in the request.
 - **Manual trades:** create paper trades directly from the portfolio API/UI
 - **Signal execution:** buy/sell signals can be converted into linked paper trades with `POST /api/signals/{signal_id}/execute`; hold signals are intentionally rejected
 - **Optional auto-paper-trading:** automatic paper-trade creation from qualifying signals is available only when `AUTO_TRADE_ENABLED=true`; it is disabled by default so first use stays review-first/manual
@@ -312,21 +336,32 @@ The `/api/health/status` endpoint now reports:
 - The frontend includes opt-in browser notifications via the browser Notification API
 - Alerts currently fire from dashboard data for high-confidence buy/sell signals, paper trades that close, and new daily briefs
 
+## Strategy Templates
+
+Built-in strategy templates provide ready-to-create rule sets from the Risk & Strategies dashboard panel:
+
+- RSI Reversal
+- MACD Trend Continuation
+- Bollinger Squeeze Breakout
+- EMA Trend Pullback
+- Volume Breakout
+
+Templates are available from `GET /api/strategies/templates` and can be converted into saved strategies with `POST /api/strategies/templates/{template_id}/create`.
+
 ## Backtesting
 
 - Walk historical candles through a strategy rule set
 - Returns: equity curve, win rate, max drawdown, total return, Sharpe ratio
 - Run via `POST /api/backtest/run`
 - Review saved backtests through the dashboard Backtests tab, including metrics, an equity curve preview, and recent simulated trades
+- Use `POST /api/backtest/optimize` or the dashboard optimizer preview to rank parameter candidates before running deeper tests
 
 ## Future Work
 
 - [ ] Live trading support (beyond paper)
-- [ ] More technical indicators and strategy templates
+- [ ] Candle-backed multi-asset parameter optimization and walk-forward testing
 - [ ] Backend-managed push notifications beyond browser-local alerts
 - [ ] User accounts and multi-user support
-- [ ] Advanced risk management (position sizing algorithms)
-- [ ] Performance dashboards and analytics
 - [ ] Additional data sources (CoinGecko, Binance, etc.)
 
 ## License

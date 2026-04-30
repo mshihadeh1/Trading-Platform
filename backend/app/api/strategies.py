@@ -6,8 +6,32 @@ from app.utils.time import utc_now
 from app.database import get_db
 from app.models.strategy import Strategy
 from app.schemas.strategy import StrategyCreate, StrategyUpdate, StrategyResponse
+from app.services.strategy_templates import get_template, list_templates
 
 router = APIRouter()
+
+
+@router.get("/templates")
+async def get_strategy_templates():
+    return list_templates()
+
+
+@router.post("/templates/{template_id}/create", response_model=StrategyResponse, status_code=201)
+async def create_strategy_from_template(template_id: str, db: Session = Depends(get_db)):
+    template = get_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Strategy template not found")
+    strategy = Strategy(
+        name=template["name"],
+        description=template["description"],
+        conditions=template["conditions"],
+        timeframe=template["timeframe"],
+        exchange=template["exchange"],
+    )
+    db.add(strategy)
+    db.commit()
+    db.refresh(strategy)
+    return strategy
 
 
 @router.get("", response_model=List[StrategyResponse])

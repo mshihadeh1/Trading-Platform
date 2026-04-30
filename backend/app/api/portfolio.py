@@ -46,6 +46,82 @@ async def get_portfolio_summary(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/performance")
+async def get_portfolio_performance(db: Session = Depends(get_db)):
+    trades = db.exec(
+        select(PaperTrade, Symbol)
+        .join(Symbol, Symbol.symbol_id == PaperTrade.symbol_id)
+        .order_by(PaperTrade.exit_time.asc(), PaperTrade.entry_time.asc())
+    ).all()
+    closed = [(trade, symbol) for trade, symbol in trades if trade.status != "open"]
+    open_trades = [(trade, symbol) for trade, symbol in trades if trade.status == "open"]
+
+    equity = settings.initial_capital
+    peak = equity
+    max_drawdown = 0.0
+    equity_curve = []
+    monthly_pnl: dict[str, float] = {}
+    symbol_pnl: dict[str, float] = {}
+    wins = 0
+    losses = 0
+    gross_profit = 0.0
+    gross_loss = 0.0
+
+    for trade, symbol in closed:
+        pnl = float(trade.pnl or 0.0)
+        equity += pnl
+        if pnl > 0:
+            wins += 1
+            gross_profit += pnl
+        else:
+            losses += 1
+            gross_loss += abs(pnl)
+        month_key = (trade.exit_time or trade.entry_time).strftime("%Y-%m")
+        monthly_pnl[month_key] = round(monthly_pnl.get(month_key, 0.0) + pnl, 2)
+        symbol_pnl[symbol.symbol] = round(symbol_pnl.get(symbol.symbol, 0.0) + pnl, 2)
+        if equity > peak:
+            peak = equity
+        drawdown = ((peak - equity) / peak * 100.0) if peak else 0.0
+        max_drawdown = max(max_drawdown, drawdown)
+        equity_curve.append({
+            "timestamp": (trade.exit_time or trade.entry_time).isoformat(),
+            "equity": round(equity, 2),
+            "pnl": round(pnl, 2),
+            "drawdown_pct": round(drawdown, 2),
+        })
+
+    for trade, symbol in open_trades:
+        _refresh_trade_mark_to_market(db, trade, symbol)
+    db.commit()
+
+    unrealized_pnl = sum(float(trade.pnl or 0.0) for trade, _ in open_trades)
+    closed_count = len(closed)
+    total_return = equity - settings.initial_capital
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else (999 if gross_profit > 0 else 0)
+    avg_win = gross_profit / wins if wins else 0.0
+    avg_loss = -(gross_loss / losses) if losses else 0.0
+
+    return {
+        "initial_capital": settings.initial_capital,
+        "current_equity": round(equity + unrealized_pnl, 2),
+        "closed_equity": round(equity, 2),
+        "total_return": round(total_return, 2),
+        "total_return_pct": round((total_return / settings.initial_capital * 100.0) if settings.initial_capital else 0.0, 2),
+        "realized_pnl": round(total_return, 2),
+        "unrealized_pnl": round(unrealized_pnl, 2),
+        "total_trades": closed_count,
+        "open_positions": len(open_trades),
+        "win_rate": round((wins / closed_count * 100.0) if closed_count else 0.0, 2),
+        "profit_factor": round(profit_factor, 2),
+        "avg_win": round(avg_win, 2),
+        "avg_loss": round(avg_loss, 2),
+        "max_drawdown": round(max_drawdown, 2),
+        "monthly_pnl": monthly_pnl,
+        "symbol_pnl": symbol_pnl,
+        "equity_curve": equity_curve,
+    }
+
+
 @router.get("")
 async def get_trades(db: Session = Depends(get_db)):
     trades = db.exec(

@@ -71,6 +71,9 @@ def compute(candles: List[dict]) -> dict:
         "ema_200": float(latest["ema_200"]) if not pd.isna(latest.get("ema_200")) else None,
         "atr": float(latest["atr"]) if not pd.isna(latest.get("atr")) else None,
         "volume_ratio": float(latest["volume_ratio"]) if not pd.isna(latest.get("volume_ratio")) else None,
+        "bb_width_pct": float(((latest["bb_upper"] - latest["bb_lower"]) / latest["close"]) * 100) if not pd.isna(latest.get("bb_upper")) and not pd.isna(latest.get("bb_lower")) and latest["close"] else None,
+        "ema_20_above_ema_50": 1.0 if not pd.isna(latest.get("ema_20")) and not pd.isna(latest.get("ema_50")) and latest["ema_20"] > latest["ema_50"] else 0.0,
+        "close_above_ema_20": 1.0 if not pd.isna(latest.get("ema_20")) and latest["close"] > latest["ema_20"] else 0.0,
     }
 
     # Price action summary

@@ -80,7 +80,7 @@ class SignalResponse(BaseModel):
     analysis_type: str
     raw_response: Optional[str] = None
     paper_trade_id: Optional[int] = None
-    timestamp: Optional[str] = None
+    timestamp: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -9,6 +9,7 @@ from sqlmodel import SQLModel, Session, create_engine
 from app.database import get_db
 from app.main import app as fastapi_app
 from app.models.candle import Candle
+from app.models.signal import Signal
 from app.models.symbol import Symbol
 import app.models  # noqa: F401 - ensure SQLModel metadata includes every table
 
@@ -64,6 +65,29 @@ def add_symbol(session: Session, symbol: str = "BTC", exchange: str = "hyperliqu
     return item
 
 
+def test_signals_route_serializes_persisted_signal_datetimes(client, db_session):
+    symbol = add_symbol(db_session)
+    signal = Signal(
+        symbol_id=symbol.symbol_id,
+        symbol=symbol.symbol,
+        exchange=symbol.exchange,
+        direction="hold",
+        confidence=65,
+        reasoning="Runtime smoke test signal",
+        analysis_type="ai",
+        timestamp=datetime(2026, 4, 30, 6, 22, 56, tzinfo=UTC),
+    )
+    db_session.add(signal)
+    db_session.commit()
+
+    response = client.get("/api/signals?limit=5")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]["symbol"] == "BTC"
+    assert payload[0]["timestamp"].startswith("2026-04-30T06:22:56")
+
+
 def test_frontend_core_api_contract_routes_return_json(client):
     paths = [
         "/api/health",
@@ -71,9 +95,12 @@ def test_frontend_core_api_contract_routes_return_json(client):
         "/api/watchlist",
         "/api/signals",
         "/api/portfolio/summary",
+        "/api/portfolio/performance",
         "/api/portfolio",
+        "/api/risk/profile",
         "/api/config",
         "/api/strategies",
+        "/api/strategies/templates",
         "/api/backtest",
     ]
     for path in paths:
@@ -238,3 +265,119 @@ def test_strategy_create_list_and_delete_contract(client):
     listed_after_delete = client.get("/api/strategies")
     assert listed_after_delete.status_code == 200
     assert listed_after_delete.json() == []
+
+
+def test_risk_position_size_calculates_fixed_fractional_and_kelly(client):
+    fixed = client.post(
+        "/api/risk/position-size",
+        json={
+            "symbol": "BTC",
+            "direction": "long",
+            "entry_price": 100.0,
+            "stop_loss": 95.0,
+            "account_equity": 10000.0,
+            "method": "fixed_fractional",
+            "risk_pct": 1.0,
+            "max_position_pct": 25.0,
+        },
+    )
+    assert fixed.status_code == 200
+    fixed_payload = fixed.json()
+    assert fixed_payload["risk_amount"] == 100.0
+    assert fixed_payload["quantity"] == 20.0
+    assert fixed_payload["notional"] == 2000.0
+    assert fixed_payload["warnings"] == []
+
+    kelly = client.post(
+        "/api/risk/position-size",
+        json={
+            "symbol": "BTC",
+            "direction": "long",
+            "entry_price": 100.0,
+            "stop_loss": 95.0,
+            "account_equity": 10000.0,
+            "method": "kelly",
+            "win_rate": 0.55,
+            "reward_risk": 2.0,
+        },
+    )
+    assert kelly.status_code == 200
+    assert 0 < kelly.json()["recommended_risk_pct"] <= 5.0
+
+
+def test_strategy_templates_can_be_listed_and_created(client):
+    listed = client.get("/api/strategies/templates")
+    assert listed.status_code == 200
+    templates = listed.json()
+    template_ids = {item["id"] for item in templates}
+    assert {"rsi_reversal", "macd_trend", "bollinger_squeeze"}.issubset(template_ids)
+    rsi_template = next(item for item in templates if item["id"] == "rsi_reversal")
+    assert rsi_template["conditions"]
+    assert rsi_template["risk_profile"]["default_risk_pct"] <= 1.0
+
+    created = client.post("/api/strategies/templates/rsi_reversal/create")
+    assert created.status_code == 201
+    strategy = created.json()
+    assert strategy["name"] == rsi_template["name"]
+    assert strategy["conditions"] == rsi_template["conditions"]
+
+
+def test_portfolio_performance_returns_equity_drawdown_and_monthly_pnl(client, db_session):
+    symbol = add_symbol(db_session, symbol="AAPL", exchange="yahoo")
+    from app.models.paper_trade import PaperTrade
+
+    db_session.add(
+        PaperTrade(
+            symbol_id=symbol.symbol_id,
+            direction="long",
+            entry_price=100,
+            quantity=1,
+            exit_price=110,
+            status="closed",
+            pnl=10,
+            pnl_pct=10,
+            entry_time=datetime(2026, 1, 5, tzinfo=UTC),
+            exit_time=datetime(2026, 1, 6, tzinfo=UTC),
+            close_reason="take_profit",
+        )
+    )
+    db_session.add(
+        PaperTrade(
+            symbol_id=symbol.symbol_id,
+            direction="long",
+            entry_price=100,
+            quantity=1,
+            exit_price=95,
+            status="closed",
+            pnl=-5,
+            pnl_pct=-5,
+            entry_time=datetime(2026, 2, 5, tzinfo=UTC),
+            exit_time=datetime(2026, 2, 6, tzinfo=UTC),
+            close_reason="stop_loss",
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/api/portfolio/performance")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_return"] == 5.0
+    assert payload["win_rate"] == 50.0
+    assert payload["monthly_pnl"]["2026-01"] == 10.0
+    assert payload["monthly_pnl"]["2026-02"] == -5.0
+    assert payload["equity_curve"][-1]["equity"] == 10005.0
+    assert payload["max_drawdown"] > 0
+
+
+def test_backtest_optimizer_returns_ranked_parameter_runs(client):
+    payload = {
+        "base_conditions": [{"indicator": "rsi", "operator": "lt", "value": 30}],
+        "parameter_grid": {"rsi": [25, 30, 35]},
+        "mock_metrics": True,
+    }
+    response = client.post("/api/backtest/optimize", json=payload)
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert len(results) == 3
+    assert results[0]["rank"] == 1
+    assert results[0]["score"] >= results[-1]["score"]
