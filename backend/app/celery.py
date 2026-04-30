@@ -4,6 +4,8 @@ import os
 
 from celery import Celery
 
+from app.config import settings
+
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 celery_app = Celery(
@@ -26,6 +28,8 @@ celery_app.config_from_object({
 })
 
 # Scheduled tasks
+_daily_brief_interval = settings.daily_brief_interval_hours * 3600 if settings.daily_brief_enabled else None
+
 celery_app.conf.beat_schedule = {
     "collect-candles": {
         "task": "app.worker.tasks.collect_candles",
@@ -40,6 +44,12 @@ celery_app.conf.beat_schedule = {
         "schedule": 30,
     },
 }
+
+if _daily_brief_interval is not None:
+    celery_app.conf.beat_schedule["generate-daily-brief"] = {
+        "task": "app.worker.tasks.generate_daily_brief",
+        "schedule": _daily_brief_interval,
+    }
 
 celery_app.conf.timezone = "UTC"
 celery_app.conf.enable_utc = True

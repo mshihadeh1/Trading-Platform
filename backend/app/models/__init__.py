@@ -2,6 +2,7 @@ from app.models.asset import Asset
 from app.models.backtest_result import BacktestResult
 from app.models.candle import Candle
 from app.models.config import AppConfig
+from app.models.daily_brief import DailyBrief
 from app.models.paper_trade import PaperTrade
 from app.models.signal import Signal
 from app.models.strategy import Strategy
@@ -13,6 +14,7 @@ __all__ = [
     "Asset",
     "BacktestResult",
     "Candle",
+    "DailyBrief",
     "PaperTrade",
     "Signal",
     "Strategy",

@@ -48,6 +48,12 @@ export const portfolio = {
     }),
 };
 
+export const dailyBrief = {
+  latest: () => fetchJson<import('../types').DailyBrief | null>('/daily-brief/latest'),
+  history: (limit: number = 20) => fetchJson<import('../types').DailyBrief[]>(`/daily-brief/history?limit=${limit}`),
+  generate: () => fetchJson<import('../types').DailyBrief>('/daily-brief/generate', { method: 'POST' }),
+};
+
 export const system = {
   status: () => fetchJson<import('../types').SystemStatus>('/health/status'),
 };

@@ -22,6 +22,7 @@ export function SignalsPanel({ signals, loading, error }: Props) {
   if (error) return <div className="text-red-400 p-4">Error loading signals: {error}</div>;
 
   const riskReward = (signal: Signal) => {
+    if (signal.risk_reward) return signal.risk_reward;
     if (!signal.entry_price || !signal.stop_loss || !signal.take_profit) return null;
     if (signal.direction === 'buy') {
       const risk = signal.entry_price - signal.stop_loss;
@@ -55,15 +56,23 @@ export function SignalsPanel({ signals, loading, error }: Props) {
                   {directionLabel[signal.direction] || signal.direction}
                 </span>
               </div>
-              <div className="text-xs text-gray-400 flex gap-3 mb-1">
-                {signal.entry_price && <span>Entry: ${signal.entry_price.toFixed(2)}</span>}
+              <div className="text-xs text-gray-400 flex flex-wrap gap-3 mb-1">
+                {signal.setup_type && <span>{signal.setup_type.replace('_', ' ')}</span>}
+                {signal.time_horizon && <span>{signal.time_horizon}</span>}
+                {signal.entry_min && signal.entry_max ? (
+                  <span>Entry: ${signal.entry_min.toFixed(2)}–${signal.entry_max.toFixed(2)}</span>
+                ) : signal.entry_price && <span>Entry: ${signal.entry_price.toFixed(2)}</span>}
                 {signal.stop_loss && <span>SL: ${signal.stop_loss.toFixed(2)}</span>}
-                {signal.take_profit && <span>TP: ${signal.take_profit.toFixed(2)}</span>}
+                {signal.take_profit && <span>TP1: ${signal.take_profit.toFixed(2)}</span>}
+                {signal.take_profit_2 && <span>TP2: ${signal.take_profit_2.toFixed(2)}</span>}
                 <span>Confidence: {signal.confidence}%</span>
                 {riskReward(signal) !== null && <span>R:R {riskReward(signal)?.toFixed(2)}x</span>}
               </div>
               {signal.confidence < 65 && (
                 <div className="text-xs text-yellow-400 mb-1">Below auto-trade confidence threshold</div>
+              )}
+              {signal.invalidation && (
+                <div className="text-xs text-red-300 mb-1">Invalidation: {signal.invalidation}</div>
               )}
               {signal.paper_trade_id && (
                 <div className="text-xs text-blue-300 mb-1">Paper trade #{signal.paper_trade_id} opened</div>

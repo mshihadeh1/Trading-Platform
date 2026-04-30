@@ -15,10 +15,16 @@ export interface Signal {
   exchange?: string;
   display_name?: string | null;
   direction: 'buy' | 'sell' | 'hold';
+  setup_type?: string;
+  time_horizon?: string;
   entry_price: number | null;
+  entry_min?: number | null;
+  entry_max?: number | null;
   stop_loss: number | null;
   take_profit: number | null;
   take_profit_2: number | null;
+  risk_reward?: number | null;
+  invalidation?: string;
   confidence: number;
   reasoning: string;
   paper_trade_id?: number | null;
@@ -133,12 +139,44 @@ export interface BacktestResult {
   error?: string;
 }
 
+export interface ComponentStatus {
+  status: string;
+  message?: string;
+  status_code?: number;
+  base_url?: string;
+  model?: string;
+}
+
 export interface SystemStatus {
   status: string;
   components: {
-    backend: boolean;
-    redis: boolean;
+    backend: boolean | ComponentStatus;
+    database?: ComponentStatus;
+    redis: boolean | ComponentStatus;
+    llm?: ComponentStatus;
     llm_endpoint: boolean;
+  };
+  data?: {
+    symbol?: string;
+    exchange?: string;
+    latest_candle_at: string | null;
+    age_seconds?: number;
+    fresh: boolean;
+  };
+  signals?: {
+    latest_signal_at: string | null;
+    symbol?: string;
+    direction?: string;
+    confidence?: number;
+    age_seconds?: number;
+    fresh: boolean;
+  };
+  daily_brief?: {
+    latest_brief_at: string | null;
+    brief_date?: string;
+    market_regime?: string;
+    age_seconds?: number;
+    fresh: boolean;
   };
   latest_candle?: {
     symbol: string;
@@ -163,4 +201,43 @@ export interface SystemStatus {
     max_position_pct: number;
     min_risk_reward_ratio: number;
   };
+}
+
+export interface DailyBriefOpportunity {
+  symbol: string;
+  display_name?: string;
+  exchange: string;
+  direction: 'buy' | 'sell' | 'hold';
+  confidence: number;
+  setup_type?: string;
+  time_horizon?: string;
+  entry_price?: number | null;
+  entry_min?: number | null;
+  entry_max?: number | null;
+  stop_loss?: number | null;
+  take_profit?: number | null;
+  take_profit_2?: number | null;
+  risk_reward?: number | null;
+  invalidation?: string;
+  reasoning?: string;
+  signal_id?: number | null;
+  timestamp?: string | null;
+}
+
+export interface DailyBrief {
+  id: number;
+  brief_date: string;
+  market_regime: string;
+  summary: string;
+  top_opportunities: DailyBriefOpportunity[];
+  risk_notes: string;
+  open_positions_summary: {
+    open_positions?: number;
+    notional_exposure?: number;
+    unrealized_pnl?: number;
+    symbols?: number[];
+  };
+  watchlist_snapshot: Record<string, any>[];
+  llm_reasoning: string;
+  created_at: string;
 }

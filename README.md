@@ -6,13 +6,14 @@ AI-powered trading dashboard combining technical analysis from Python with reaso
 
 - **Watchlist** — track symbols from Hyperliquid (crypto perps) and Yahoo Finance (stocks, ETFs, crypto)
 - **Candlestick charts** — real-time and historical OHLCV data via TradingView Lightweight Charts
-- **AI signals** — Python computes indicators, LLM generates reasoning and buy/sell signals
+- **AI signals** — Python computes indicators, LLM generates reasoning and structured buy/sell signals (setup type, time horizon, entry zone, risk/reward, invalidation)
+- **Daily brief** — consolidated market overview: regime, top opportunities with entry/stop/target, open positions summary, and risk notes
 - **Paper trading** — simulated portfolio with P&L tracking, stop-loss and take-profit
 - **Strategy builder** — define and manage custom trading strategies
 - **Backtesting** — walk historical candles through a strategy and get metrics (win rate, Sharpe, max drawdown)
 - **Trade journal** — log and review past paper trades
-- **System status** — monitor backend services, Redis, LLM endpoint, and Celery worker health
-- **Scheduled analysis** — automatic analysis of watchlist symbols every 4 hours
+- **System status** — monitor backend services, Redis, LLM endpoint, Celery worker health, data freshness, and risk limits
+- **Scheduled analysis** — automatic analysis of watchlist symbols every 4 hours; daily brief every 24 hours
 
 ## Architecture
 
@@ -90,7 +91,7 @@ trading-platform/
 │   ├── package.json         # Vite + React + TypeScript
 │   └── src/
 │       ├── App.tsx          # Root dashboard layout
-│       ├── components/      # UI panels (chart, signals, portfolio, etc.)
+│       ├── components/      # UI panels (chart, daily brief, signals, portfolio, etc.)
 │       ├── hooks/           # React data-fetching hooks
 │       ├── lib/             # API client
 │       └── types/           # TypeScript types
@@ -124,6 +125,8 @@ Key variables:
 | `DATABASE_URL` | SQLite database path | `sqlite:///./data/trading.db` |
 | `INITIAL_CAPITAL` | Starting paper trading balance | `10000` |
 | `ANALYSIS_INTERVAL_HOURS` | Hours between scheduled analyses | `4` |
+| `DAILY_BRIEF_ENABLED` | Enable/disable daily brief generation | `true` |
+| `DAILY_BRIEF_INTERVAL_HOURS` | Hours between daily brief generations | `24` |
 
 ### 2. Start the Stack
 
@@ -210,6 +213,9 @@ All routes are prefixed with `/api/`. Full interactive docs at `http://localhost
 | GET | `/api/signals` | List AI-generated signals |
 | GET | `/api/signals/{symbol}` | Latest signals for a symbol |
 | POST | `/api/signals/analyze/{symbol}` | Trigger on-demand analysis |
+| GET | `/api/daily-brief/latest` | Latest daily market brief |
+| GET | `/api/daily-brief/history` | Historical daily briefs |
+| POST | `/api/daily-brief/generate` | Generate a new daily brief on demand |
 | GET | `/api/portfolio` | Portfolio summary and P&L |
 | POST | `/api/portfolio/trade` | Execute a paper trade |
 | GET | `/api/strategies` | List strategies |
@@ -241,6 +247,40 @@ All routes are prefixed with `/api/`. Full interactive docs at `http://localhost
 5. **Store signal** — result saved to SQLite for frontend display
 
 Analysis runs every 4 hours for all watchlist symbols via Celery Beat. You can also trigger it on demand via the API.
+
+### Structured Signal Fields
+
+Signals now include structured fields for trade planning:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `setup_type` | Trading setup classification | `breakout`, `pullback`, `reversal`, `momentum` |
+| `time_horizon` | Expected holding period | `intraday`, `swing`, `position` |
+| `entry_price` | Suggested entry price | `63450.50` |
+| `entry_min` / `entry_max` | Entry price range | `63000` - `64000` |
+| `risk_reward` | Risk/reward ratio | `2.5` |
+| `invalidation` | Condition that invalidates the setup | `Close below 62500` |
+
+### Daily Brief
+
+The daily brief consolidates everything into a morning overview:
+
+- **Market regime** — overall market conditions (bullish, bearish, sideways, volatile)
+- **Summary** — narrative overview of the day's landscape
+- **Top opportunities** — up to 3 signals with entry, stop, target, and risk/reward
+- **Open positions summary** — current open trades, exposure, and unrealized P&L
+- **Risk notes** — highlighted risks and things to watch
+
+The daily brief is generated automatically every 24 hours via Celery Beat, or on demand through the API or UI.
+
+### System Status
+
+The `/api/health/status` endpoint now reports:
+
+- Component health: backend, database, Redis, LLM endpoint
+- Data freshness: latest candle age, latest signal age, latest daily brief age
+- Worker task status: last run timestamps for all scheduled tasks
+- Risk limits: auto-trade confidence threshold, max open trades, max position %, min risk/reward
 
 ## Paper Trading
 

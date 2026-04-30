@@ -18,10 +18,16 @@ class Signal(SQLModel, table=True):
     exchange: str = "hyperliquid"
     direction: str = "hold"  # buy, sell, hold
     entry_price: Optional[float] = None
+    entry_min: Optional[float] = None
+    entry_max: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
     take_profit_2: Optional[float] = None
     confidence: int = 50
+    setup_type: str = "unspecified"
+    time_horizon: str = "swing"
+    risk_reward: Optional[float] = None
+    invalidation: str = ""
     reasoning: str = ""
     indicators_data: Optional[str] = None
     llm_model: Optional[str] = None
@@ -37,9 +43,16 @@ class SignalCreate(BaseModel):
     exchange: str = "hyperliquid"
     direction: str
     entry_price: Optional[float] = None
+    entry_min: Optional[float] = None
+    entry_max: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
+    take_profit_2: Optional[float] = None
     confidence: int = 50
+    setup_type: str = "unspecified"
+    time_horizon: str = "swing"
+    risk_reward: Optional[float] = None
+    invalidation: str = ""
     reasoning: str = ""
 
 
@@ -51,10 +64,16 @@ class SignalResponse(BaseModel):
     exchange: str
     direction: str
     entry_price: Optional[float] = None
+    entry_min: Optional[float] = None
+    entry_max: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
     take_profit_2: Optional[float] = None
     confidence: int
+    setup_type: str = "unspecified"
+    time_horizon: str = "swing"
+    risk_reward: Optional[float] = None
+    invalidation: str = ""
     reasoning: str
     indicators_data: Optional[str] = None
     llm_model: Optional[str] = None

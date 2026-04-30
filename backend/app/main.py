@@ -14,6 +14,7 @@ from app.api import (
     backtest,
     candles,
     config as config_api,
+    daily_brief,
     health,
     portfolio,
     signals,
@@ -67,6 +68,7 @@ app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"]
 app.include_router(strategies.router, prefix="/api/strategies", tags=["strategies"])
 app.include_router(backtest.router, prefix="/api/backtest", tags=["backtest"])
 app.include_router(config_api.router, prefix="/api/config", tags=["config"])
+app.include_router(daily_brief.router, prefix="/api/daily-brief", tags=["daily brief"])
 app.include_router(assets.router)
 app.include_router(trade.router)
 

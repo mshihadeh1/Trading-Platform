@@ -28,6 +28,8 @@ class Settings(BaseSettings):
 
     # Analysis schedule
     analysis_interval_hours: int = 4
+    daily_brief_enabled: bool = True
+    daily_brief_interval_hours: int = 24
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

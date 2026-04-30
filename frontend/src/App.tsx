@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Chart } from './components/Chart';
 import { SignalsPanel } from './components/SignalsPanel';
+import { DailyBriefPanel } from './components/DailyBriefPanel';
 import { PortfolioPanel } from './components/PortfolioPanel';
 import { SystemStatusPanel } from './components/SystemStatusPanel';
 import { TradeJournalPanel } from './components/TradeJournalPanel';
@@ -10,6 +11,7 @@ import { useCandles } from './hooks/useCandles';
 import { useSignals } from './hooks/useSignals';
 import { usePortfolio } from './hooks/usePortfolio';
 import { useSystemStatus } from './hooks/useSystemStatus';
+import { useDailyBrief } from './hooks/useDailyBrief';
 import { candles as candlesApi, signals as signalsApi } from './lib/api';
 import type { SymbolInfo } from './types';
 
@@ -18,6 +20,13 @@ export default function App() {
   const { signals, loading: signalsLoading, error: signalsError, refetch: refetchSignals } = useSignals();
   const { summary, trades, loading: portfolioLoading, error: portfolioError, refetch: refetchPortfolio } = usePortfolio();
   const { status: systemStatus, error: systemError, refetch: refetchSystemStatus } = useSystemStatus();
+  const {
+    brief: dailyBrief,
+    loading: dailyBriefLoading,
+    generating: dailyBriefGenerating,
+    error: dailyBriefError,
+    generate: generateDailyBrief,
+  } = useDailyBrief();
 
   const [activeSymbol, setActiveSymbol] = useState<SymbolInfo | null>(null);
   const [activeTab, setActiveTab] = useState<'chart' | 'portfolio'>('chart');
@@ -115,6 +124,15 @@ export default function App() {
         <div className="flex-1 p-4 space-y-4 overflow-auto">
           {activeTab === 'chart' && (
             <>
+              {/* Daily Brief */}
+              <DailyBriefPanel
+                brief={dailyBrief}
+                loading={dailyBriefLoading}
+                generating={dailyBriefGenerating}
+                error={dailyBriefError}
+                onGenerate={generateDailyBrief}
+              />
+
               {/* Chart */}
               <div className="bg-dark-800 rounded-lg border border-dark-600 p-4">
                 {activeSymbol ? (

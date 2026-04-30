@@ -36,6 +36,12 @@ def _run_lightweight_migrations():
         },
         "signals": {
             "paper_trade_id": "ALTER TABLE signals ADD COLUMN paper_trade_id INTEGER",
+            "entry_min": "ALTER TABLE signals ADD COLUMN entry_min FLOAT",
+            "entry_max": "ALTER TABLE signals ADD COLUMN entry_max FLOAT",
+            "setup_type": "ALTER TABLE signals ADD COLUMN setup_type VARCHAR DEFAULT 'unspecified'",
+            "time_horizon": "ALTER TABLE signals ADD COLUMN time_horizon VARCHAR DEFAULT 'swing'",
+            "risk_reward": "ALTER TABLE signals ADD COLUMN risk_reward FLOAT",
+            "invalidation": "ALTER TABLE signals ADD COLUMN invalidation VARCHAR DEFAULT ''",
         },
         "paper_trades": {
             "current_price": "ALTER TABLE paper_trades ADD COLUMN current_price FLOAT",

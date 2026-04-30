@@ -17,6 +17,7 @@ from app.models.candle import Candle
 from app.models.paper_trade import PaperTrade
 from app.models.symbol import Symbol
 from app.services.candle_collector import CandleCollector
+from app.services.daily_brief import DailyBriefService
 from app.services.llm_analysis import LLMAnalysisService
 from app.services.yahoo_finance import get_current_price
 
@@ -158,6 +159,19 @@ def analyze_watchlist(timeframe: str = "1h") -> dict:
 @celery_app.task(name="app.worker.tasks.analyze_all_signals")
 def analyze_all_signals(timeframe: str = "1h") -> dict:
     return analyze_watchlist(timeframe=timeframe)
+
+
+@celery_app.task(name="app.worker.tasks.generate_daily_brief")
+def generate_daily_brief_task() -> dict:
+    logger.info("Generating daily trading brief")
+    task_result = {"status": "ok", "brief_id": None, "updated_at": utc_now().isoformat()}
+    with session_scope() as db:
+        brief = DailyBriefService().generate(db)
+        task_result["brief_id"] = brief.id
+        task_result["brief_date"] = brief.brief_date.isoformat()
+        task_result["market_regime"] = brief.market_regime
+        _set_task_status(db, "task.generate_daily_brief", task_result, "Latest daily brief generation task status")
+    return task_result
 
 
 @celery_app.task(name="app.worker.tasks.check_sl_tp")

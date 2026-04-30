@@ -43,11 +43,17 @@ Rules:
 Return ONLY valid JSON:
 {{
   "direction": "buy | sell | hold",
+  "confidence": int,
+  "setup_type": "breakout | pullback | mean_reversion | trend_continuation | reversal | none",
+  "time_horizon": "scalp | intraday | swing",
+  "entry_min": float | null,
+  "entry_max": float | null,
   "entry_price": float | null,
   "stop_loss": float | null,
   "take_profit": float | null,
   "take_profit_2": float | null,
-  "confidence": int,
+  "risk_reward": float | null,
+  "invalidation": "what would invalidate this setup",
   "reasoning": "detailed explanation"
 }}
 """
@@ -172,10 +178,16 @@ class LLMAnalysisService:
             exchange=symbol.exchange,
             direction=self._normalize_direction(result.get("direction")),
             entry_price=self._as_float(result.get("entry_price")) or current_price,
+            entry_min=self._as_float(result.get("entry_min")),
+            entry_max=self._as_float(result.get("entry_max")),
             stop_loss=self._as_float(result.get("stop_loss")),
             take_profit=self._as_float(result.get("take_profit")),
             take_profit_2=self._as_float(result.get("take_profit_2")),
             confidence=self._as_int(result.get("confidence"), default=50),
+            setup_type=str(result.get("setup_type") or "unspecified").strip().lower(),
+            time_horizon=str(result.get("time_horizon") or "swing").strip().lower(),
+            risk_reward=self._as_float(result.get("risk_reward")),
+            invalidation=str(result.get("invalidation") or "").strip(),
             reasoning=str(result.get("reasoning") or "").strip(),
             indicators_data=json.dumps(indicators),
             llm_model=self.model,
@@ -294,17 +306,42 @@ class LLMAnalysisService:
             lines = cleaned.splitlines()
             cleaned = "\n".join(lines[1:-1]).strip()
 
+        parsed = None
         try:
-            return json.loads(cleaned)
+            parsed = json.loads(cleaned)
         except json.JSONDecodeError:
             start = cleaned.find("{")
             end = cleaned.rfind("}")
             if start == -1 or end == -1 or end <= start:
                 return None
             try:
-                return json.loads(cleaned[start : end + 1])
+                parsed = json.loads(cleaned[start : end + 1])
             except json.JSONDecodeError:
                 return None
+        if not isinstance(parsed, dict):
+            return None
+        return self._normalize_signal_payload(parsed)
+
+    def _normalize_signal_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "direction": self._normalize_direction(payload.get("direction")),
+            "confidence": self._as_int(payload.get("confidence"), default=50),
+            "setup_type": self._normalize_label(payload.get("setup_type"), default="unspecified"),
+            "time_horizon": self._normalize_label(payload.get("time_horizon"), default="swing"),
+            "entry_min": self._as_float(payload.get("entry_min")),
+            "entry_max": self._as_float(payload.get("entry_max")),
+            "entry_price": self._as_float(payload.get("entry_price")),
+            "stop_loss": self._as_float(payload.get("stop_loss")),
+            "take_profit": self._as_float(payload.get("take_profit")),
+            "take_profit_2": self._as_float(payload.get("take_profit_2")),
+            "risk_reward": self._as_float(payload.get("risk_reward")),
+            "invalidation": str(payload.get("invalidation") or "").strip(),
+            "reasoning": str(payload.get("reasoning") or "").strip(),
+        }
+
+    def _normalize_label(self, value: Any, default: str) -> str:
+        normalized = str(value or default).strip().lower().replace(" ", "_").replace("-", "_")
+        return normalized or default
 
     def _normalize_direction(self, direction: Any) -> str:
         normalized = str(direction or "hold").strip().lower()

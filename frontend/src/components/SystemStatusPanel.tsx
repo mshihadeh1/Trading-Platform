@@ -1,12 +1,17 @@
-import type { SystemStatus } from '../types';
+import type { ComponentStatus, SystemStatus } from '../types';
 
 interface Props {
   status: SystemStatus | null;
   error: string | null;
 }
 
-function statusColor(value: boolean) {
-  return value ? 'text-green-300 bg-green-900/30' : 'text-yellow-300 bg-yellow-900/30';
+function isOk(value: boolean | ComponentStatus | undefined) {
+  if (typeof value === 'boolean') return value;
+  return value?.status === 'ok';
+}
+
+function statusColor(value: boolean | ComponentStatus | undefined) {
+  return isOk(value) ? 'text-green-300 bg-green-900/30' : 'text-yellow-300 bg-yellow-900/30';
 }
 
 export function SystemStatusPanel({ status, error }: Props) {
@@ -19,6 +24,13 @@ export function SystemStatusPanel({ status, error }: Props) {
   }
 
   const taskEntries = Object.entries(status.tasks).slice(0, 4);
+  const latestCandle = status.data ?? (status.latest_candle ? {
+    symbol: status.latest_candle.symbol,
+    exchange: status.latest_candle.exchange,
+    latest_candle_at: status.latest_candle.timestamp,
+    age_seconds: status.latest_candle.age_seconds,
+    fresh: status.latest_candle.fresh,
+  } : undefined);
 
   return (
     <div className="bg-dark-800 rounded-lg border border-dark-600 overflow-hidden">
@@ -28,16 +40,29 @@ export function SystemStatusPanel({ status, error }: Props) {
       <div className="p-4 space-y-4">
         <div className="flex flex-wrap gap-2 text-xs">
           <span className={`px-2 py-1 rounded ${statusColor(status.components.backend)}`}>Backend</span>
+          <span className={`px-2 py-1 rounded ${statusColor(status.components.database)}`}>Database</span>
           <span className={`px-2 py-1 rounded ${statusColor(status.components.redis)}`}>Redis</span>
-          <span className={`px-2 py-1 rounded ${statusColor(status.components.llm_endpoint)}`}>LLM</span>
-          <span className={`px-2 py-1 rounded ${status.latest_candle?.fresh ? 'text-green-300 bg-green-900/30' : 'text-red-300 bg-red-900/30'}`}>
-            {status.latest_candle?.fresh ? 'Fresh candles' : 'Stale candles'}
+          <span className={`px-2 py-1 rounded ${statusColor(status.components.llm ?? status.components.llm_endpoint)}`}>LLM</span>
+          <span className={`px-2 py-1 rounded ${latestCandle?.fresh ? 'text-green-300 bg-green-900/30' : 'text-red-300 bg-red-900/30'}`}>
+            {latestCandle?.fresh ? 'Fresh candles' : 'Stale candles'}
+          </span>
+          <span className={`px-2 py-1 rounded ${status.signals?.fresh ? 'text-green-300 bg-green-900/30' : 'text-yellow-300 bg-yellow-900/30'}`}>
+            {status.signals?.latest_signal_at ? 'Signals available' : 'No signals yet'}
+          </span>
+          <span className={`px-2 py-1 rounded ${status.daily_brief?.fresh ? 'text-green-300 bg-green-900/30' : 'text-yellow-300 bg-yellow-900/30'}`}>
+            {status.daily_brief?.fresh ? 'Today brief ready' : 'Brief stale/missing'}
           </span>
         </div>
 
-        {status.latest_candle && (
+        {latestCandle?.latest_candle_at && (
           <div className="text-xs text-gray-400">
-            Latest candle: {status.latest_candle.symbol} on {status.latest_candle.exchange} • {Math.floor(status.latest_candle.age_seconds / 60)}m old
+            Latest candle: {latestCandle.symbol} on {latestCandle.exchange} • {Math.floor((latestCandle.age_seconds ?? 0) / 60)}m old
+          </div>
+        )}
+
+        {status.signals?.latest_signal_at && (
+          <div className="text-xs text-gray-400">
+            Latest signal: {status.signals.symbol} {status.signals.direction} {status.signals.confidence}% • {Math.floor((status.signals.age_seconds ?? 0) / 60)}m old
           </div>
         )}
 
