@@ -203,6 +203,8 @@ class LLMAnalysisService:
         return signal
 
     def _auto_execute_paper_trade(self, db: Session, symbol: Symbol, signal: Signal) -> None:
+        if not settings.auto_trade_enabled:
+            return
         if signal.direction not in {"buy", "sell"}:
             return
         if signal.confidence < settings.auto_trade_min_confidence:

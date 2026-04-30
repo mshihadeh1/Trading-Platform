@@ -62,6 +62,7 @@ async def system_status(db: Session = Depends(get_db)):
         "worker": _worker_status(tasks),
         "analysis_interval_hours": settings.analysis_interval_hours,
         "risk_limits": {
+            "auto_trade_enabled": settings.auto_trade_enabled,
             "auto_trade_min_confidence": settings.auto_trade_min_confidence,
             "max_open_trades": settings.max_open_trades,
             "max_position_pct": settings.max_position_pct,

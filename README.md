@@ -127,6 +127,11 @@ Key variables:
 | `SECRET_KEY` | FastAPI secret key | any random string |
 | `DATABASE_URL` | SQLite database path | `sqlite:///./data/trading.db` |
 | `INITIAL_CAPITAL` | Starting paper trading balance | `10000` |
+| `MAX_POSITION_PCT` | Maximum account percentage allocated to each paper trade | `10` |
+| `AUTO_TRADE_ENABLED` | Opt-in automatic paper-trade creation from qualifying AI signals | `false` |
+| `AUTO_TRADE_MIN_CONFIDENCE` | Minimum signal confidence required when auto-trading is enabled | `65` |
+| `MAX_OPEN_TRADES` | Maximum number of simultaneously open paper trades | `5` |
+| `MIN_RISK_REWARD_RATIO` | Minimum risk/reward required when auto-trading is enabled | `1.5` |
 | `ANALYSIS_INTERVAL_HOURS` | Hours between scheduled analyses | `4` |
 | `DAILY_BRIEF_ENABLED` | Enable/disable daily brief generation | `true` |
 | `DAILY_BRIEF_INTERVAL_HOURS` | Hours between daily brief generations | `24` |
@@ -296,6 +301,7 @@ The `/api/health/status` endpoint now reports:
 - **Position sizing:** max position percentage configurable via `MAX_POSITION_PCT` (default: 10%)
 - **Manual trades:** create paper trades directly from the portfolio API/UI
 - **Signal execution:** buy/sell signals can be converted into linked paper trades with `POST /api/signals/{signal_id}/execute`; hold signals are intentionally rejected
+- **Optional auto-paper-trading:** automatic paper-trade creation from qualifying signals is available only when `AUTO_TRADE_ENABLED=true`; it is disabled by default so first use stays review-first/manual
 - **Stop-loss / Take-profit:** checked every 30 seconds by the Celery worker
 - **Trade journal:** all trades logged with entry/exit, P&L, and signal reference
 

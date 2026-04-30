@@ -10,6 +10,7 @@ from app.database import get_db
 from app.main import app as fastapi_app
 from app.models.candle import Candle
 from app.models.paper_trade import PaperTrade
+from app.config import settings
 from app.models.signal import Signal
 from app.models.symbol import Symbol
 from app.services.llm_analysis import LLMAnalysisService
@@ -149,6 +150,7 @@ def test_health_status_reports_named_components_and_freshness(client, db_session
     assert payload["data"]["latest_candle_at"] is not None
     assert payload["data"]["fresh"] is True
     assert payload["signals"]["latest_signal_at"] is not None
+    assert payload["risk_limits"]["auto_trade_enabled"] is settings.auto_trade_enabled
 
 
 def test_execute_signal_creates_linked_paper_trade(client, db_session):
@@ -210,6 +212,64 @@ def test_execute_signal_rejects_hold_signal(client, db_session):
 
     assert response.status_code == 400
     assert "hold" in response.json()["detail"].lower()
+
+
+def test_auto_paper_trade_is_opt_in(client, db_session, monkeypatch):
+    symbol = add_symbol(db_session)
+    signal = Signal(
+        symbol_id=symbol.symbol_id,
+        symbol="BTC",
+        exchange="hyperliquid",
+        direction="buy",
+        confidence=95,
+        entry_price=100.0,
+        stop_loss=95.0,
+        take_profit=110.0,
+        risk_reward=2.0,
+        reasoning="High-confidence setup.",
+    )
+    db_session.add(signal)
+    db_session.commit()
+    db_session.refresh(signal)
+    monkeypatch.setattr(settings, "auto_trade_enabled", False, raising=False)
+
+    LLMAnalysisService(base_url="http://example.test/v1", api_key="test", model="test-model")._auto_execute_paper_trade(
+        db_session, symbol, signal
+    )
+
+    db_session.refresh(signal)
+    assert signal.paper_trade_id is None
+    assert db_session.exec(select(PaperTrade)).all() == []
+
+
+def test_auto_paper_trade_creates_trade_when_enabled(client, db_session, monkeypatch):
+    symbol = add_symbol(db_session)
+    signal = Signal(
+        symbol_id=symbol.symbol_id,
+        symbol="BTC",
+        exchange="hyperliquid",
+        direction="buy",
+        confidence=95,
+        entry_price=100.0,
+        stop_loss=95.0,
+        take_profit=110.0,
+        risk_reward=2.0,
+        reasoning="High-confidence setup.",
+    )
+    db_session.add(signal)
+    db_session.commit()
+    db_session.refresh(signal)
+    monkeypatch.setattr(settings, "auto_trade_enabled", True, raising=False)
+
+    LLMAnalysisService(base_url="http://example.test/v1", api_key="test", model="test-model")._auto_execute_paper_trade(
+        db_session, symbol, signal
+    )
+
+    db_session.refresh(signal)
+    trade = db_session.exec(select(PaperTrade)).one()
+    assert signal.paper_trade_id == trade.id
+    assert trade.source_signal_id == signal.id
+    assert trade.direction == "long"
 
 
 def test_llm_parser_normalizes_structured_signal_fields():
