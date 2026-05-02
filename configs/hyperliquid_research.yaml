@@ -1,0 +1,39 @@
+# Hyperliquid research/paper-trading configuration.
+# Phase 1 is paper/research only. Do not add private keys here.
+mode: paper
+symbols:
+  crypto_baseline: [BTC, ETH, SOL]
+  stock_index_watch: [AAPL, MSFT, NVDA, TSLA, SPX, QQQ]
+strategy: trend_flow_baseline
+risk:
+  initial_cash_usd: 10000
+  max_risk_per_trade_pct: 0.005
+  max_daily_loss_pct: 0.02
+  max_weekly_loss_pct: 0.05
+  max_open_positions: 2
+  leverage: 1.0
+  max_leverage_allowed: 2.0
+  default_stop_loss_pct: 0.01
+  take_profit_R: 1.8
+  max_trades_per_day: 2
+audit_thresholds:
+  min_volume_24h: 1000000
+  good_volume_24h: 10000000
+  min_open_interest: 500000
+  good_open_interest: 5000000
+  good_spread_bps: 5
+  max_spread_bps: 25
+  good_tracking_bps: 10
+  max_tracking_bps: 75
+  min_candles: 20
+  min_overall_score: 0.60
+data:
+  interval: 15m
+  candle_limit: 200
+  poll_seconds: 60
+outputs:
+  root: data/hyperliquid
+us_market_hours:
+  timezone: America/New_York
+  regular_open: '09:30'
+  regular_close: '16:00'

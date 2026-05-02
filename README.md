@@ -16,6 +16,7 @@ AI-powered trading dashboard combining technical analysis from Python with reaso
 - **Backtesting dashboard** — review saved backtests with metrics, equity curve, simulated trade log, and quick parameter optimization previews
 - **Performance analytics** — portfolio performance dashboard with equity curve, max drawdown, monthly P&L, profit factor, average win/loss, and symbol P&L
 - **Browser alerts** — opt-in desktop notifications for high-confidence signals, stale data/worker/LLM warnings, closed paper trades, and new daily briefs
+- **Hyperliquid research pipeline** — script-first market audit, deterministic paper-only strategy signals, and paper execution simulation for crypto majors plus stock/index-like perp candidates
 - **Realtime stream** — lightweight WebSocket snapshots for live dashboard status and latest candle updates
 - **Trade journal** — log and review paper trades with win rate, realized/unrealized P&L, average win/loss, and risk levels
 - **System status** — monitor backend services, Redis, LLM endpoint, Celery worker health, data freshness, daily brief readiness, task recency, and risk limits
@@ -72,6 +73,16 @@ AI-powered trading dashboard combining technical analysis from Python with reaso
 ```
 trading-platform/
 ├── docker-compose.yml       # Full stack: backend, worker, redis, frontend
+├── configs/
+│   └── hyperliquid_research.yaml # Paper-only research/audit config
+├── scripts/
+│   ├── run_hyperliquid_market_audit.py
+│   ├── run_hyperliquid_backtest.py
+│   └── run_hyperliquid_forward_paper.py
+├── services/
+│   └── hyperliquid_research/ # Script-first Hyperliquid audit/features/strategies/paper broker
+├── docs/
+│   └── HYPERLIQUID_RESEARCH_RUNBOOK.md
 ├── .env.example             # Environment variables template
 │
 ├── backend/
@@ -265,7 +276,19 @@ All routes are prefixed with `/api/`. Full interactive docs at `http://localhost
 - **What:** Crypto perpetual futures (perps)
 - **Protocol:** WebSocket
 - **Symbols:** Auto-seeded from Hyperliquid's perp list
-- **Usage:** Real-time price data, candle collection
+- **Usage:** Real-time price data, candle collection, and script-first research market-quality audits
+
+### Hyperliquid Research Scripts
+
+Phase 1 research is intentionally separate from the live dashboard and live trading. It uses public data only, writes CSV/JSON outputs, and rejects markets when liquidity, spread, tracking, or candle data is insufficient.
+
+```bash
+python3 scripts/run_hyperliquid_market_audit.py --output data/hyperliquid/
+python3 scripts/run_hyperliquid_backtest.py --symbols BTC,ETH,SOL --strategy trend_flow_baseline --output data/hyperliquid/backtest_latest
+python3 scripts/run_hyperliquid_forward_paper.py --symbols BTC,ETH,SOL --iterations 3 --output data/hyperliquid/forward_paper
+```
+
+See `docs/HYPERLIQUID_RESEARCH_RUNBOOK.md` for output interpretation, risk limits, known limitations, and next steps before any live trading adapter.
 
 ### Yahoo Finance
 

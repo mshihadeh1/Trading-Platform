@@ -12,6 +12,7 @@ venv/
 
 # Local data / databases
 backend/data/
+data/
 *.db
 *.sqlite
 *.sqlite3
